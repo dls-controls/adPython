@@ -24,8 +24,11 @@ SUPPORT=/dls_sw/prod/R3.14.12.3/support
 WORK=/dls_sw/work/R3.14.12.3/support
 TOOLS_BASE=/dls_sw/prod/tools/RHEL6-x86_64
 
+BENSUPPORT=/home/cvl62853/Development/local/support
+
 ASYN = $(SUPPORT)/asyn/4-31
-ADCORE = $(SUPPORT)/ADCore/2-6dls5
+#ADCORE = $(SUPPORT)/ADCore/2-6dls5
+ADCORE = $(BENSUPPORT)/ADCore
 PYTHON_PREFIX=$(TOOLS_BASE)/Python/2-7-3/prefix
 
 # EPICS_BASE usually appears last so other apps can override stuff:
