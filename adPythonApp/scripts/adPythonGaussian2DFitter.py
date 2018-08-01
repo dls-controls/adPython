@@ -13,7 +13,7 @@ class Gaussian2DFitter(AdPythonPlugin):
     def __init__(self):
         # The default logging level is INFO.
         # Comment this line to set debug logging off
-        self.log.setLevel(logging.DEBUG) 
+        # self.log.setLevel(logging.DEBUG) 
         # Make inputs and ouptuts list
         params = dict(PeakHeight = 1, 
                       OriginX = 2, 
@@ -84,16 +84,25 @@ class Gaussian2DFitter(AdPythonPlugin):
                 theta = -theta * numpy.pi /180 # converting to radians
                 # Create an array of zeros the same size as the original image.
                 overlay_cross = numpy.zeros_like(image)
+
+                x_len = len(image[0])
+                y_len = len(image[1])
                 #Draw cross pixel by pixel by setting each pixel to 256 (i.e. white)
                 for axs in range(0,ax_size):
-                    ulimb = (orig_x + axs * numpy.cos(theta), orig_y + axs * numpy.sin(theta))
-                    llimb = (orig_x - axs * numpy.cos(theta), orig_y - axs * numpy.sin(theta))
-                    ulima = (orig_x + axs * numpy.sin(theta), orig_y - axs * numpy.cos(theta))
-                    llima = (orig_x - axs * numpy.sin(theta), orig_y + axs * numpy.cos(theta))
-                    overlay_cross[ulimb] = col
-                    overlay_cross[llimb] = col
-                    overlay_cross[ulima] = col
-                    overlay_cross[llima] = col
+                    ulimb = (int(orig_x + axs * numpy.cos(theta)), int(orig_y + axs * numpy.sin(theta)))
+                    llimb = (int(orig_x - axs * numpy.cos(theta)), int(orig_y - axs * numpy.sin(theta)))
+                    ulima = (int(orig_x + axs * numpy.sin(theta)), int(orig_y - axs * numpy.cos(theta)))
+                    llima = (int(orig_x - axs * numpy.sin(theta)), int(orig_y + axs * numpy.cos(theta)))
+                    
+                    if is_inside_image_boundary(ulimb[0], ulimb[1], x_len, y_len):
+                        overlay_cross[ulimb] = col
+                    if is_inside_image_boundary(llimb[0], llimb[1], x_len, y_len):
+                        overlay_cross[llimb] = col
+                    if is_inside_image_boundary(ulima[0], ulima[1], x_len, y_len):
+                        overlay_cross[ulima] = col
+                    if is_inside_image_boundary(llima[0], llima[1], x_len, y_len):
+                        overlay_cross[llima] = col
+
                 return overlay_cross
                 
             def plot_elipse(image, orig_x, orig_y, sig_x, sig_y, theta, col):
@@ -119,8 +128,11 @@ class Gaussian2DFitter(AdPythonPlugin):
                 ex_vec = ex_vec + orig_x
                 ey_vec = ey_vec + orig_y
                 point_list = zip(ex_vec,ey_vec)
+
+                y_len = len(ey_vec)
                 for nf in point_list:
-                    overlay_elipse[nf] = col
+                    if is_inside_image_boundary(nf[0], nf[1], x_len, y_len):
+                        overlay_elipse[nf] = col
                 return overlay_elipse
     
             def plot_ROI(image, results):
@@ -139,6 +151,13 @@ class Gaussian2DFitter(AdPythonPlugin):
                 # Preferentially sets the pixel value to the overaly value if the overlay is not zero.
                 out = numpy.where(overlay == 0, image, overlay)
                 return out
+
+            def is_inside_image_boundary(x, y, x_size, y_size):
+                '''Checks if point (x,y) is within a x_size*y_size image'''
+                if x < 0 or x >= x_size or y < 0 or y >= y_size:
+                    return False
+                else:
+                    return True
     
             if self["OverlayCross"] == 1:
                 ol_cross = plot_ab_axis(arr, fit[2], fit[3], th, ax_size = 20, col=255)
