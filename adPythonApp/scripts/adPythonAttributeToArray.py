@@ -14,7 +14,7 @@ class AttributeToArray(AdPythonPlugin):
 
     def __init__(self):
         # Set logging level
-        self.log.setLevel(logging.DEBUG)
+        self.log.setLevel(logging.INFO)
 
         # Attributes
         self.attributes_missed_on_last_array = 0
@@ -56,9 +56,9 @@ class AttributeToArray(AdPythonPlugin):
             if self.attributes_missed_on_last_array > 0:
                 self["Status"] = "Missed {0} attribute(s)".format(
                     self.attributes_missed_on_last_array)
+                self["MissedAttributeCounter"] += self.attributes_missed_on_last_array
             else:
                 self["Status"] = "Good"
-                self["MissedAttributeCounter"] += self.attributes_missed_on_last_array
 
             return attribute_array
         else:
