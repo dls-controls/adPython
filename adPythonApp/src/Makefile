@@ -57,4 +57,6 @@ endif
 
 USR_CXXFLAGS += -DDATADIRS=\"$(shell cd ..; pwd):$(shell cd ../../scripts; pwd)\"
 
+include $(ADCORE)/ADApp/commonLibraryMakefile
+
 include $(TOP)/configure/RULES

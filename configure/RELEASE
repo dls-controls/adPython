@@ -19,17 +19,14 @@
 # Build settings that are NOT module paths should appear in a
 # CONFIG_SITE file.
 
-TEMPLATE_TOP=$(EPICS_BASE)/templates/makeBaseApp/top
-SUPPORT=/dls_sw/prod/R3.14.12.3/support
+-include $(TOP)/../configure/RELEASE_LIBS_INCLUDE
+-include $(TOP)/RELEASE.local
+-include $(TOP)/configure/RELEASE.local
+
 WORK=/dls_sw/work/R3.14.12.3/support
 TOOLS_BASE=/dls_sw/prod/tools/RHEL6-x86_64
 
-ASYN=$(SUPPORT)/asyn/4-26
-ADCORE=$(SUPPORT)/ADCore/2-4dls8
 PYTHON_PREFIX=$(TOOLS_BASE)/Python/2-7-3/prefix
-
-# EPICS_BASE usually appears last so other apps can override stuff:
-EPICS_BASE=/dls_sw/epics/R3.14.12.3/base
 
 # Set RULES here if you want to take build rules from somewhere
 # other than EPICS_BASE:

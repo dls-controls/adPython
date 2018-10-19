@@ -50,11 +50,11 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
                    const char *NDArrayPort, int NDArrayAddr, int maxBuffers, 
                    size_t maxMemory, int priority, int stackSize)
     : NDPluginDriver(portNameArg, queueSize, blockingCallbacks,
-                       NDArrayPort, NDArrayAddr, 1, NUM_ADPYTHONPLUGIN_PARAMS, 
+                       NDArrayPort, NDArrayAddr, 1,
                        maxBuffers, maxMemory,
                        asynGenericPointerMask|asynFloat64ArrayMask,
                        asynGenericPointerMask|asynFloat64ArrayMask,
-                       ASYN_MULTIDEVICE, 1, priority, stackSize) 
+                       ASYN_MULTIDEVICE, 1, priority, stackSize, 1)
 {
     // Initialise some params
     this->pInstance = NULL;
@@ -134,7 +134,7 @@ void adPythonPlugin::initThreads()
   */
 void adPythonPlugin::processCallbacks(NDArray *pArray) {
     // First call the base class method
-    NDPluginDriver::processCallbacks(pArray);
+    NDPluginDriver::beginProcessCallbacks(pArray);
 
     // Make sure we are in a good state, otherwise do nothing
     if (this->pluginState != GOOD) return;
@@ -151,8 +151,8 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     this->lock(); 
 
     // Store the time at the beginning of processing for profiling 
-    epicsTimeStamp start, end;
-    epicsTimeGetCurrent(&start);
+    epicsTimeStamp startTime, endTime;
+    epicsTimeGetCurrent(&startTime);
        
     // Update the attribute dict
     this->updateAttrDict(pArray);        
@@ -180,8 +180,8 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     this->updateAttrList(pArray);
 
     // timestamp
-    epicsTimeGetCurrent(&end);
-    setDoubleParam(adPythonTime, epicsTimeDiffInSeconds(&end, &start)*1000);
+    epicsTimeGetCurrent(&endTime);
+    setDoubleParam(adPythonTime, epicsTimeDiffInSeconds(&endTime, &startTime)*1000);
     callParamCallbacks();
 
     // release GIL and dict Mutex 
@@ -851,6 +851,7 @@ static int adPythonPluginConfigure(const char *portNameArg, const char *filename
                    NDArrayPort, NDArrayAddr, maxBuffers, maxMemory,
                    priority, stackSize);
     adp->initThreads();
+    adp->start();
     return(asynSuccess);
 }
 
