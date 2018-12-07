@@ -68,7 +68,7 @@ def gauss(A, b):
     k = n-1
     # x[k] = b[k]/A[k, k]
     while k >= 0:
-        if A[k, k] == 0 and b[k] == 0:
+        if A[k, k] == 0:
             x[k] = 0
         else:
             x[k] = (b[k] - dot(A[k, k+1:], x[k+1:]))/A[k, k]

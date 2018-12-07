@@ -11,8 +11,10 @@ from fit_lib_temp.levmar import FitError
 from fit_lib_temp.fit_lib_temp import doFit2dGaussian, convert_abc
 import scipy.ndimage
 
-# copied from fit_lib for to debug
-
+# fit_lib has been copied into the repo to easily allow a workaround for a numpy issue to be implemented:
+# It appears that when numpy attempts to multiply/divide numbers in an array which are close to zero (e.g. 1e-320)
+# the thread hangs indefinitely and throws no error.
+# As such checks have been put in place to set any such numbers to zero exactly.
 
 def centre_of_mass(image):
     m00 = numpy.sum(image)
