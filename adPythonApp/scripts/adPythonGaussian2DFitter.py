@@ -6,6 +6,7 @@ require("scipy == 0.10.1")
 
 from adPythonPlugin import AdPythonPlugin
 import numpy
+import json
 from fit_lib import fit_lib
 from fit_lib_temp.levmar import FitError
 from fit_lib_temp.fit_lib_temp import doFit2dGaussian, convert_abc
@@ -57,13 +58,21 @@ class Gaussian2DFitter(AdPythonPlugin):
                       FitType=-1
                       )
         AdPythonPlugin.__init__(self, params)
-
+        self.tempCounter = 0
     # def paramChanged(self):
-    #     # one of our input parameters has changed
+    #     # one of our input parameters has change
     #     # just log it for now, do nothing.
     #     self.log.debug("Parameter has been changed %s", self)
 
     def processArray(self, arr, attr={}):
+        tempName = '/tmp/%03d.json' % self.tempCounter
+        with open(tempName, 'w') as tempFile:
+            tempFile.write(json.dumps(arr.tolist()))
+        self.tempCounter += 1
+        print("Please process array from %s" % tempName)
+        return arr
+
+    def processArray_LOCAL(self, arr, attr={}):
         # Called when the plugin gets a new array
         # arr is a numpy array
         # attr is an attribute dictionary that will be attached to the array
@@ -74,7 +83,7 @@ class Gaussian2DFitter(AdPythonPlugin):
         # Run a median filter over the image to remove the spikes due to dead pixels.
         arr2 = scipy.ndimage.median_filter(arr2, size=3)
         try:
-            fit, error, results = doFit2dGaussian(
+            fit, error, results = fit_lib.doFit2dGaussian(
                 arr2, thinning=(self["FitThinning"], self["FitThinning"]), #self.FitThinning
                 window_size=self["FitWindowSize"], maxiter=self["Maxiter"], #self.FitWindowSize   self.maxiter
                 ROI=None, gamma=(0, 255), ##[[150, 150],[100, 100]]
