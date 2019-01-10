@@ -16,6 +16,7 @@ import scipy.ndimage
 # the thread hangs indefinitely and throws no error.
 # As such checks have been put in place to set any such numbers to zero exactly.
 
+
 def centre_of_mass(image):
     m00 = numpy.sum(image)
     m10 = 0
@@ -28,7 +29,8 @@ def centre_of_mass(image):
     cy = int(m01/m00)
     sx = numpy.std(image[:, cy])
     sy = numpy.std(image[cx, :])
-    return cx, cy, sx, sy, int(m00)
+    return cx, cy, sx, sy, int(m00)/numpy.sum(image.shape)
+
 
 class Gaussian2DFitter(AdPythonPlugin):
     def __init__(self):
@@ -69,7 +71,6 @@ class Gaussian2DFitter(AdPythonPlugin):
         self["FitStatus"] = "Processing array..."
         # Convert the array to a float so that we do not overflow during processing.
         arr2 = numpy.float_(arr)
-
         # Run a median filter over the image to remove the spikes due to dead pixels.
         arr2 = scipy.ndimage.median_filter(arr2, size=3)
         try:
@@ -81,6 +82,7 @@ class Gaussian2DFitter(AdPythonPlugin):
             # fit outputs in terms of ABC we want sigma x, sigma y and angle.
             s_x, s_y, th = convert_abc(*fit[4:7])
             if any([fit[i+2] < -arr2.shape[i] or fit[i+2] > 2*arr2.shape[i] for i in [0, 1]]):
+                print("manual fit error!")
                 raise FitError("Fit out of range")
 
         except FitError:
@@ -90,6 +92,8 @@ class Gaussian2DFitter(AdPythonPlugin):
             th = 0.0
             fit = [0.0, h0, cx, cy]
             error = 0.0
+            s_x = 1.0
+            s_y = 1.0
         else:
             self["FitStatus"] = "Gaussian Fit OK"
             self["FitType"] = 0
@@ -104,8 +108,9 @@ class Gaussian2DFitter(AdPythonPlugin):
         self["Angle"] = th
         self["Error"] = float(error)
 
-        if self["OutputType"] == 1:
+        if self["OutputType"] == 1 and self["FitType"] == 0:
             # create the model output and take a difference to the original data.
+            # only if the gaussian fit actually succeeded
             grid = fit_lib.flatten_grid(fit_lib.create_grid(arr.shape))
             arr = arr2 - fit_lib.Gaussian2d(fit, grid).reshape(arr.shape)
             arr = numpy.uint8(arr)
@@ -199,7 +204,6 @@ class Gaussian2DFitter(AdPythonPlugin):
             ol_cross = plot_ab_axis(arr, fit[2], fit[3], th, ax_size=cross_size, col=255)
             arr = apply_overlay(arr, ol_cross)
 
-
         ellipse_x = min((0.5*(arr.shape[0] - fit[2]), 0.5*fit[2], s_x))
         ellipse_y = min((0.5*(arr.shape[1] - fit[3]), 0.5*fit[3], s_y))
         if self["OverlayElipse"] == 1:
@@ -211,25 +215,32 @@ class Gaussian2DFitter(AdPythonPlugin):
             arr = apply_overlay(arr, ol_ROI)
 
         # Write the attibute array which will be attached to the output array.
-        #Note that we convert from the numpy
+        # Note that we convert from the numpy
         # uint64 type to a python integer as we only handle python integers,
         # doubles and strings in the C code for now
         # Fitter results
         for param in self:
             attr[param] = self[param]
         # Write something to the logs
-        self.log.debug("Array processed, baseline: %f, peak height: %d, origin x: %d, origin y: %d, sigma x: %f, sigma y: %f, angle: %f, error: %f, output: %d", self["Baseline"], self["PeakHeight"], self["OriginX"], self["OriginY"], self["SigmaX"],self["SigmaY"],self["Angle"], self["Error"], self["OutputType"])
+        self.log.debug(
+            "Array processed, baseline: %f, peak height: %d, origin x: %d, " +
+            "origin y: %d, sigma x: %f, sigma y: %f, angle: %f, error: %f, output: %d",
+            self["Baseline"], self["PeakHeight"], self["OriginX"],
+            self["OriginY"], self["SigmaX"], self["SigmaY"],
+            self["Angle"], self["Error"], self["OutputType"]
+        )
         # return the resultant array.
         return arr
 
+
 if __name__=="__main__":
     Gaussian2DFitter().runOffline(
-        int1=256,            # This has range 0..255
-        int2=500,        # This has range 0..255
-        int3=500,        # This has range 0..255
-        double1=(0,30,0.01), # This has range 0, 0.01, 0.02 ... 30
-        double2=(0,30,0.01), # This has range 0, 0.01, 0.02 ... 30
-        double3=(0,360,0.1)) # This has range 0, 0.1, 0.002 ... 360
+        int1=256,               # This has range 0..255
+        int2=500,               # This has range 0..255
+        int3=500,               # This has range 0..255
+        double1=(0, 30, 0.01),  # This has range 0, 0.01, 0.02 ... 30
+        double2=(0, 30, 0.01),  # This has range 0, 0.01, 0.02 ... 30
+        double3=(0, 360, 0.1))  # This has range 0, 0.1, 0.002 ... 360
     #     PeakHeight = 256,
     #     OriginX = (-500, 500,1), 
     #     OriginY = (-500,500,1),  
