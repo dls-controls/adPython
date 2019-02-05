@@ -31,7 +31,6 @@ require("fit_lib == 1.3")
 import math
 import numpy
 import types
-import time
 
 from fit_lib import static
 import levmar
@@ -214,7 +213,12 @@ def Gaussian2d(params, xy):
     x, y = xy
     x = x - x_0
     y = y - y_0
-    exp_part = numpy.exp(-(A * x**2 + B * y**2 + C * x*y))
+    mat = -(A * x**2 + B * y**2 + C * x*y)
+    # if any numbers are too big, just return inf since exp'ing them causes numpy to crash the thread
+    if numpy.absolute(mat).max() > 400:
+        return numpy.inf
+
+    exp_part = numpy.exp(mat)
     mult = numpy.zeros(len(exp_part))
     for i in range(len(exp_part)):
         if abs(exp_part[i]) < 1e-200:

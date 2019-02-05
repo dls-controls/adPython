@@ -8,6 +8,7 @@
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include "numpy/ndarrayobject.h"
 #include <stdio.h>
+#include <limits.h>
 #include <libgen.h>
 #include <epicsTime.h>
 #include "NDArray.h"
@@ -57,6 +58,9 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
     this->pInstance = NULL;
     this->pParams = NULL;    
     this->pProcessArray = NULL;
+    this->pAbortProcessing = NULL;
+    this->pHasResult = NULL;
+    this->pGetResult = NULL;
     this->pParamChanged = NULL;
     this->pMakePyInst = NULL;
     this->pAttrs = NULL;
@@ -67,13 +71,15 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
    
     // Create the base class parameters (our python class may make some more)
     setStringParam(NDPluginDriverPluginType, driverName);
-    createParam("ADPYTHON_FILENAME",   asynParamOctet,   &adPythonFilename);
-    setStringParam(adPythonFilename,   filename);
-    createParam("ADPYTHON_CLASSNAME",  asynParamOctet,   &adPythonClassname);
-    setStringParam(adPythonClassname,  classname);
-    createParam("ADPYTHON_LOAD",       asynParamInt32,   &adPythonLoad);
-    createParam("ADPYTHON_TIME",       asynParamFloat64, &adPythonTime);    
-    createParam("ADPYTHON_STATE",      asynParamInt32,   &adPythonState);        
+    createParam("ADPYTHON_FILENAME",     asynParamOctet,   &adPythonFilename);
+    setStringParam(adPythonFilename,     filename);
+    createParam("ADPYTHON_CLASSNAME",    asynParamOctet,   &adPythonClassname);
+    setStringParam(adPythonClassname,    classname);
+    createParam("ADPYTHON_LOAD",         asynParamInt32,   &adPythonLoad);
+    createParam("ADPYTHON_TIME",         asynParamFloat64, &adPythonTime);
+    createParam("ADPYTHON_STATE",        asynParamInt32,   &adPythonState);
+    createParam("ADPYTHON_PROC_TIMEOUT", asynParamInt32,   &adPythonProcTimeout);
+    createParam("ADPYTHON_PROC_ABORT",   asynParamInt32,   &adPythonProcAbort);
 }
 
 /** Init function called once immediately after class instantiation. Starts the
@@ -160,8 +166,32 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     // Unlock for long call
     this->unlock();
     
-    // Make the function call    
-    PyObject *pValue = PyObject_CallObject(this->pProcessArray, this->pProcessArgs);
+    // Make the function call
+    //TODO: Change this to call into python thread and await response/abort call from asyn param
+    PyObject_CallObject(this->pProcessArray, this->pProcessArgs);
+    PyObject *processingDone = PyObject_CallObject(this->pHasResult, NULL);
+    PyObject *pValue;
+    int processingTimeout;
+    int doAbort = 0;
+    epicsTimeStamp array_proc_start, array_proc_now;
+    epicsTimeGetCurrent(&array_proc_start);
+    getIntegerParam(adPythonProcTimeout, &processingTimeout);
+    if (processingTimeout == 0) {
+        processingTimeout = INT_MAX;
+    }
+    while (!PyObject_IsTrue(processingDone) && doAbort == 0) {
+        processingDone = PyObject_CallObject(this->pHasResult, NULL);
+        // epicsThreadSleep(0.001);
+        getIntegerParam(adPythonProcAbort, &doAbort);
+        epicsTimeGetCurrent(&array_proc_now);
+        doAbort = doAbort || epicsTimeDiffInSeconds(&array_proc_now, &array_proc_start)*1000 > processingTimeout;
+    }
+    if (doAbort != 0) {
+        PyObject_CallObject(this->pAbortProcessing, NULL);
+        pValue = this->pProcessArgs;
+    } else {
+        pValue = PyObject_CallObject(this->pGetResult, NULL);
+    }
 
     // Lock back up
     this->lock();
@@ -374,7 +404,27 @@ asynStatus adPythonPlugin::makePyInst() {
     Py_XDECREF(this->pProcessArray);
     this->pProcessArray = PyObject_GetAttrString(this->pInstance, "_processArray");
     if (this->pProcessArray == NULL) Bad("Can't get processArray ref");
-    
+
+    // Get the getResult function ref
+    Py_XDECREF(this->pGetResult);
+    this->pGetResult = PyObject_GetAttrString(this->pInstance, "getResult");
+    if (this->pGetResult == NULL) Bad("Can't get getResult ref");
+
+    // Get the hasResult function ref
+    Py_XDECREF(this->pHasResult);
+    this->pHasResult = PyObject_GetAttrString(this->pInstance, "hasResult");
+    if (this->pHasResult == NULL) Bad("Can't get hasResult ref");
+
+    // Get the abortProcessing function ref
+    Py_XDECREF(this->pAbortProcessing);
+    this->pAbortProcessing = PyObject_GetAttrString(this->pInstance, "abortProcessing");
+    if (this->pAbortProcessing == NULL) Bad("Can't get abortProcessing ref");
+
+    // Get the abortProcessing function ref
+    Py_XDECREF(this->pEndProcess);
+    this->pEndProcess = PyObject_GetAttrString(this->pInstance, "endArrayProcess");
+    if (this->pEndProcess== NULL) Bad("Can't get abortProcessing ref");
+
     // Get the paramChanged function ref
     Py_XDECREF(this->pParamChanged);
     this->pParamChanged = PyObject_GetAttrString(this->pInstance, "_paramChanged");
@@ -796,6 +846,10 @@ asynStatus adPythonPlugin::updateAttrList(NDArray *pArray) {
       
     return asynSuccess;
 }
+
+adPythonPlugin::~adPythonPlugin() {
+    PyObject_CallObject(this->pEndProcess, NULL);
+};
 
 /* The obligatory lookup table of ad datatype to numpy datatype */
 struct pix_lookup {

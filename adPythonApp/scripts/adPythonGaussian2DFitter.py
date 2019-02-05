@@ -3,10 +3,10 @@
 from pkg_resources import require
 require("fit_lib == 1.3")
 require("scipy == 0.10.1")
+require("cothread==2.15")
 
 from adPythonPlugin import AdPythonPlugin
 import numpy
-import json
 from fit_lib import fit_lib
 from fit_lib_temp.levmar import FitError
 from fit_lib_temp.fit_lib_temp import doFit2dGaussian, convert_abc
@@ -34,6 +34,7 @@ def centre_of_mass(image):
 
 
 class Gaussian2DFitter(AdPythonPlugin):
+    tempCounter = 0
     def __init__(self):
         # The default logging level is INFO.
         # Comment this line to set debug logging off
@@ -58,54 +59,62 @@ class Gaussian2DFitter(AdPythonPlugin):
                       FitType=-1
                       )
         AdPythonPlugin.__init__(self, params)
-        self.tempCounter = 0
+
     # def paramChanged(self):
     #     # one of our input parameters has change
     #     # just log it for now, do nothing.
     #     self.log.debug("Parameter has been changed %s", self)
 
-    def processArray(self, arr, attr={}):
-        tempName = '/tmp/%03d.json' % self.tempCounter
-        with open(tempName, 'w') as tempFile:
-            tempFile.write(json.dumps(arr.tolist()))
-        self.tempCounter += 1
-        print("Please process array from %s" % tempName)
-        return arr
-
-    def processArray_LOCAL(self, arr, attr={}):
+    def processArray(self, arr, attr={}, skip_gaussian=False):
         # Called when the plugin gets a new array
         # arr is a numpy array
         # attr is an attribute dictionary that will be attached to the array
+        self.tempCounter += 1
         self["FitType"] = -1
         self["FitStatus"] = "Processing array..."
         # Convert the array to a float so that we do not overflow during processing.
         arr2 = numpy.float_(arr)
         # Run a median filter over the image to remove the spikes due to dead pixels.
         arr2 = scipy.ndimage.median_filter(arr2, size=3)
-        try:
-            fit, error, results = fit_lib.doFit2dGaussian(
-                arr2, thinning=(self["FitThinning"], self["FitThinning"]), #self.FitThinning
-                window_size=self["FitWindowSize"], maxiter=self["Maxiter"], #self.FitWindowSize   self.maxiter
-                ROI=None, gamma=(0, 255), ##[[150, 150],[100, 100]]
-                extra_data=True)
-            # fit outputs in terms of ABC we want sigma x, sigma y and angle.
-            s_x, s_y, th = convert_abc(*fit[4:7])
-            if any([fit[i+2] < -arr2.shape[i] or fit[i+2] > 2*arr2.shape[i] for i in [0, 1]]):
-                print("manual fit error!")
-                raise FitError("Fit out of range")
-
-        except FitError:
+        if skip_gaussian:
             self["FitStatus"] = "Fit error (using CoM as fallback)"
             self["FitType"] = 1
             cx, cy, s_x, s_y, h0 = centre_of_mass(arr2)
             th = 0.0
             fit = [0.0, h0, cx, cy]
             error = 0.0
+            results = None
             s_x = 1.0
             s_y = 1.0
         else:
-            self["FitStatus"] = "Gaussian Fit OK"
-            self["FitType"] = 0
+            try:
+                if self.tempCounter == 200:
+                    while True:
+                        pass
+                    self.tempCounter = 0
+                fit, error, results = doFit2dGaussian(
+                    arr2, thinning=(self["FitThinning"], self["FitThinning"]), #self.FitThinning
+                    window_size=self["FitWindowSize"], maxiter=self["Maxiter"], #self.FitWindowSize   self.maxiter
+                    ROI=None, gamma=(0, 255), ##[[150, 150],[100, 100]]
+                    extra_data=True)
+                # fit outputs in terms of ABC we want sigma x, sigma y and angle.
+                s_x, s_y, th = convert_abc(*fit[4:7])
+                if any([fit[i+2] < -arr2.shape[i] or fit[i+2] > 2*arr2.shape[i] for i in [0, 1]]):
+                    raise FitError("Fit out of range")
+
+            except FitError:
+                self["FitStatus"] = "Fit error (using CoM as fallback)"
+                self["FitType"] = 1
+                cx, cy, s_x, s_y, h0 = centre_of_mass(arr2)
+                th = 0.0
+                fit = [0.0, h0, cx, cy]
+                error = 0.0
+                results = None
+                s_x = 1.0
+                s_y = 1.0
+            else:
+                self["FitStatus"] = "Gaussian Fit OK"
+                self["FitType"] = 0
 
         # Write out to the EDM output parameters.
         self["Baseline"] = float(fit[0])
@@ -219,7 +228,7 @@ class Gaussian2DFitter(AdPythonPlugin):
             ol_elipse = plot_elipse(arr, fit[2], fit[3], ellipse_x, ellipse_y, th, 255)
             arr = apply_overlay(arr, ol_elipse)
 
-        if self["OverlayROI"] == 1:
+        if self["OverlayROI"] == 1 and results is not None:
             ol_ROI = plot_ROI(arr, results)
             arr = apply_overlay(arr, ol_ROI)
 
@@ -241,6 +250,8 @@ class Gaussian2DFitter(AdPythonPlugin):
         # return the resultant array.
         return arr
 
+    def processArrayCoM(self, arr, attr={}):
+        return self.processArray(self, arr, attr, skip_gaussian=True)
 
 if __name__=="__main__":
     Gaussian2DFitter().runOffline(

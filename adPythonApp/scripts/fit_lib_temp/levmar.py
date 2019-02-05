@@ -24,55 +24,9 @@
 #      alun.morgan@diamond.ac.uk, michael.abbott@diamond.ac.uk
 
 '''Gauss-Newton / Levenberg Marquardt nonlinear least squares'''
-from random import random
 from numpy import arange, inner, zeros, dot, absolute, multiply
 
 from numpy.linalg import solve
-
-
-def gauss(a, b):
-    n = a.shape[0]
-    A = zeros((n, n+1))
-    A[:, :n] = a
-    A[:, n] = b
-    for i in range(0, n):
-        # Search for maximum in this column
-        maxEl = abs(A[i, i])
-        maxRow = i
-        for k in range(i+1, n):
-            if abs(A[k, i]) > maxEl:
-                maxEl = abs(A[k, i])
-                maxRow = k
-        # Swap maximum row with current row (column by column)
-        for k in range(i, n+1):
-            tmp = A[maxRow, k]
-            A[maxRow, k] = A[i, k]
-            A[i, k] = tmp
-        # Make all rows below this one 0 in current column
-        for k in range(i+1, n):
-            if A[i, i] == 0.0:
-                return None
-            c = -A[k, i]/A[i, i]
-            if abs(c) < 1e-150:
-                c = 0
-            for j in range(i, n+1):
-                if i == j:
-                    A[k, j] = 0
-                else:
-                    A[k, j] += c * A[i, j]
-    # Solve equation Ax=b for an upper triangular matrix A
-    x = zeros(n)
-    for i in range(n-1, -1, -1):
-        if abs(A[i, n]) > 1e-150 and abs(A[i, i] > 1e-150):
-            x[i] = A[i, n]/A[i, i]
-        elif abs(A[i, n]) < 1e-150 and abs(A[i, i] > 1e-150):
-            x[i] = 0
-        else:
-            return None
-        for k in range(i-1, -1, -1):
-            A[k, n] -= A[k, i] * x[i]
-    return x
-
 
 def diag_ix(N):
     '''Returns a value suitable for indexing the diagonal of a square NxN
@@ -165,52 +119,35 @@ def levmar(f, df, a,
         # From Jacobian matrix compute alpha0, an estimate of the Hessian, and
         # beta, (half) the gradient vector.
         de = df(a)
-        #print("Jacobian")
         beta = inner(de, e)
-        beta = multiply(absolute(beta) > 1e-200, beta)
         alpha0 = inner(de, de)
-        alpha0 = multiply(absolute(alpha0) > 1e-200, alpha0)
-
+        # set any near-zero entries to zero since these cause numpy to crash the processing thread!
+        beta = multiply(absolute(beta) > 1e-100, beta)
+        alpha0 = multiply(absolute(alpha0) > 1e-100, alpha0)
 
         # Now seek a lambda which actually improves the value of chi2
-        print("lambda is %s" % lam)
         while lam < max_lambda:
             # Compute alpha = alpha0 * (1 + diag(lam)) and use this to compute
             # the next value for a.
-            #print("Solve")
             # Assess the new position.
-            x = None
-            while x is None:
-                alpha = +alpha0
-                alpha[d] *= 1 + lam
-                x = gauss(alpha, beta)  # solve(alpha, beta)
-                if x is None:
-                    lam *= 10 # (1 + 0.001 * (1 - 0.5 * random()))
+            alpha = +alpha0
+            alpha[d] *= 1 + lam
+            x = solve(alpha, beta)  # solve(alpha, beta)
             a_new = a - x
-            a_far = a - 100*x
             e = f(a_new)
-            e_far = f(a_far)
-
-            #print("Function")
             if e is None:
-                print("oops")
                 # Oops.  Outside the boundary.  Increasing lam should eventually
                 # bring us closer to a.
                 lam *= 10.
             else:
                 chi2_new = (e ** 2).sum()
-                chi2_far = (e_far ** 2).sum()
-                if chi2_new > chi2 and chi2_far > chi2:
-                    print("bad! %s" % chi2_new)
+                if chi2_new > chi2:
                     # Worse.  Try again closer to a and with a more linear fit.
                     lam *= 10.
-                elif chi2_new < chi2_far:
-                    # Good.  We have an improvement.
-                    print("better... %s" % (chi2_new - chi2))
-                    break
                 else:
-                    print("bigger is better!... %s" % (chi2_far - chi2))
+                    # Good.  We have an improvement.
                     break
+
         else:
             # max_lambda reached.  Give up now.
             return a, chi2, iter, LEVMAR_STATUS_LAMBDA
@@ -219,18 +156,15 @@ def levmar(f, df, a,
         lam *= 0.1
 
         if chi2_new < ctol:
-            print("good solution!")
             return a, chi2_new, iter, LEVMAR_STATUS_CTOL
         elif chi2 - chi2_new < ftol * chi2_new:
             # Looks like this is good enough.  Either chi2 is small enough or
             # the fractional improvement is so small that we're good enough.
-            print("good solution!")
             return a, chi2_new, iter, LEVMAR_STATUS_FTOL
         else:
             chi2 = chi2_new
 
     # Iterations exhausted.
-    print("its something...")
     return a, chi2, iter, LEVMAR_STATUS_ITER
 
 

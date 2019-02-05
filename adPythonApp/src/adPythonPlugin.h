@@ -18,7 +18,7 @@ public:
                    const char *classname, int queueSize, int blockingCallbacks,
 				   const char *NDArrayPort, int NDArrayAddr, int maxBuffers, size_t maxMemory,
 				   int priority, int stackSize);
-	~adPythonPlugin() {}
+	~adPythonPlugin();
 	/** This called once immediately after class instantiation */
 	virtual void initThreads();
     /** This is called when the plugin gets a new array callback */
@@ -37,7 +37,9 @@ protected:
     int adPythonClassname;
     int adPythonLoad;
     int adPythonTime;
-    int adPythonState;    
+    int adPythonState;
+    int adPythonProcTimeout;
+    int adPythonProcAbort;
     #define LAST_ADPYTHONPLUGIN_PARAM adPythonState
     #define NUM_ADPYTHONPLUGIN_PARAMS (&LAST_ADPYTHONPLUGIN_PARAM - &FIRST_ADPYTHONPLUGIN_PARAM + 1 + NUSERPARAMS)
     int adPythonUserParams[NUSERPARAMS];
@@ -54,7 +56,7 @@ private:
     asynStatus lookupNpyFormat(NDDataType_t ad_fmt, int *npy_fmt);
     asynStatus lookupAdFormat(int npy_fmt, NDDataType_t *ad_fmt);
     
-    PyObject *pInstance, *pParams, *pProcessArray, *pParamChanged, *pMakePyInst, *pAttrs, *pProcessArgs;
+    PyObject *pInstance, *pParams, *pProcessArray, *pParamChanged, *pMakePyInst, *pAttrs, *pProcessArgs, *pAbortProcessing, *pHasResult, *pGetResult, *pEndProcess;
     NDAttributeList *pFileAttributes;
     int nextParam, pluginState;
     epicsMutexId dictMutex;
