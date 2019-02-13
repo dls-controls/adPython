@@ -6,7 +6,7 @@ try:
 except:
     pass
 
-import imp, logging, numpy, multiprocessing, time, os, signal, atexit
+import imp, logging, numpy, multiprocessing, time, os, signal
 
 logging.basicConfig(format='%(asctime)s %(levelname)8s %(name)8s %(filename)s:%(lineno)d: %(message)s', level=logging.INFO)
 
@@ -53,24 +53,6 @@ def processArrayFromQueue(plugin):
             plugin.resultQueue.put((new_array, attr, plugin._params))
 
 
-# def watchdog(killQueue):
-#     pid_to_kill = None
-#     while True:
-#         if not killQueue.empty():
-#             pid_to_kill = killQueue.get()
-#         if not :
-#             os.kill(pid_to_kill, signal.SIGKILL)
-#             killQueue.close()
-#             return
-#         time.sleep(10)
-
-def attemptKill(plugin):
-    try:
-        os.kill(plugin["worker"], signal.SIGKILL)
-    except Exception as e:
-        print 'Error whilst killing worker thread...%s' % e
-
-
 class AdPythonPlugin(object):   
     # Will be our param dict
     _params = None
@@ -88,9 +70,6 @@ class AdPythonPlugin(object):
         self.inputQueue = None
         self.resultQueue = None
         self.processArrayProcess = None
-        self.watchdogProcess = None
-        atexit.register(attemptKill, (self,))
-        self.initWatchdogProcess()
         self.initArrayProcess()
 
     # get a param value
@@ -117,15 +96,6 @@ class AdPythonPlugin(object):
     # iter
     def __iter__(self):
         return iter(self._params)
-
-    # called when parameter list changes
-
-    def initWatchdogProcess(self):
-        watchdogKillQueue = multiprocessing.Queue()
-        self.watchdogProcess = multiprocessing.Process(target=watchdog, args=(watchdogKillQueue,))
-        self.watchdogProcess.daemon = True
-        self.log.debug("spawned watchdog process: %s" % self.watchdogProcess)
-        self.watchdogProcess.start()
 
     def initArrayProcess(self):
         self.inputQueue = multiprocessing.Queue()
@@ -157,6 +127,7 @@ class AdPythonPlugin(object):
         time.sleep(0.001)
         self.initArrayProcess()
 
+    # called when parameter list changes
     def _paramChanged(self):
         try:
             self.log.debug("Param changed: %s", self._params)        
