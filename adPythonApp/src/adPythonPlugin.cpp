@@ -7,10 +7,12 @@
 #define PYTHON_USE_NUMPY
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include "numpy/ndarrayobject.h"
+#include <iostream>
 #include <stdio.h>
 #include <limits.h>
 #include <libgen.h>
 #include <epicsTime.h>
+#include <epicsExit.h>
 #include "NDArray.h"
 #include "adPythonPlugin.h"
 
@@ -58,7 +60,9 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
     this->pInstance = NULL;
     this->pParams = NULL;    
     this->pProcessArray = NULL;
+    this->pProcessArrayFallback = NULL;
     this->pAbortProcessing = NULL;
+    this->pEndProcess = NULL;
     this->pHasResult = NULL;
     this->pGetResult = NULL;
     this->pParamChanged = NULL;
@@ -80,6 +84,16 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
     createParam("ADPYTHON_STATE",        asynParamInt32,   &adPythonState);
     createParam("ADPYTHON_PROC_TIMEOUT", asynParamInt32,   &adPythonProcTimeout);
     createParam("ADPYTHON_PROC_ABORT",   asynParamInt32,   &adPythonProcAbort);
+    epicsAtExit(endProcessingThread, this);
+}
+
+void endProcessingThread(void* object) {
+    adPythonPlugin* plugin  = (adPythonPlugin*) object;
+    PyEval_RestoreThread(plugin->threadState);
+    plugin->lock();
+    PyObject_CallObject(plugin->pEndProcess, NULL);
+    plugin->unlock();
+    plugin->threadState = PyEval_SaveThread();
 }
 
 /** Init function called once immediately after class instantiation. Starts the
@@ -188,7 +202,7 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     }
     if (doAbort != 0) {
         PyObject_CallObject(this->pAbortProcessing, NULL);
-        pValue = this->pProcessArgs;
+        pValue = PyObject_CallObject(this->pProcessArrayFallback, this->pProcessArgs);
     } else {
         pValue = PyObject_CallObject(this->pGetResult, NULL);
     }
@@ -404,6 +418,11 @@ asynStatus adPythonPlugin::makePyInst() {
     Py_XDECREF(this->pProcessArray);
     this->pProcessArray = PyObject_GetAttrString(this->pInstance, "_processArray");
     if (this->pProcessArray == NULL) Bad("Can't get processArray ref");
+
+    // Get the processArrayFallback function ref
+    Py_XDECREF(this->pProcessArrayFallback);
+    this->pProcessArrayFallback = PyObject_GetAttrString(this->pInstance, "processArrayFallback");
+    if (this->pProcessArrayFallback == NULL) Bad("Can't get processArrayFallback ref");
 
     // Get the getResult function ref
     Py_XDECREF(this->pGetResult);
@@ -846,10 +865,6 @@ asynStatus adPythonPlugin::updateAttrList(NDArray *pArray) {
       
     return asynSuccess;
 }
-
-adPythonPlugin::~adPythonPlugin() {
-    PyObject_CallObject(this->pEndProcess, NULL);
-};
 
 /* The obligatory lookup table of ad datatype to numpy datatype */
 struct pix_lookup {

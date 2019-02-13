@@ -65,6 +65,9 @@ class Gaussian2DFitter(AdPythonPlugin):
     #     # just log it for now, do nothing.
     #     self.log.debug("Parameter has been changed %s", self)
 
+    def processArrayFallback(self, arr, attr={}):
+        return self.processArray(arr, attr, skip_gaussian=True)
+
     def processArray(self, arr, attr={}, skip_gaussian=False):
         # Called when the plugin gets a new array
         # arr is a numpy array
@@ -250,8 +253,6 @@ class Gaussian2DFitter(AdPythonPlugin):
         # return the resultant array.
         return arr
 
-    def processArrayCoM(self, arr, attr={}):
-        return self.processArray(self, arr, attr, skip_gaussian=True)
 
 if __name__=="__main__":
     Gaussian2DFitter().runOffline(

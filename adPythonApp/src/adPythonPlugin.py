@@ -6,9 +6,10 @@ try:
 except:
     pass
 
-import imp, os, logging, numpy, multiprocessing, time, os, signal
+import imp, logging, numpy, multiprocessing, time, os, signal, atexit
 
 logging.basicConfig(format='%(asctime)s %(levelname)8s %(name)8s %(filename)s:%(lineno)d: %(message)s', level=logging.INFO)
+
 
 # define a helper function that imports a python filename and returns an 
 # instance of classname which is contained in it
@@ -44,10 +45,30 @@ def processArrayFromQueue(plugin):
             time.sleep(0.001)
         else:
             (arr, attr, updated_params) = plugin.inputQueue.get()
+            if arr.shape == (1,) and arr[0] == "blue pill":
+                return
             for k, v in updated_params.items():
-                plugin[k] = v
+                plugin._params[k] = v
             new_array = plugin.processArray(arr, attr)
-            plugin.resultQueue.put((new_array, attr, plugin._params,))
+            plugin.resultQueue.put((new_array, attr, plugin._params))
+
+
+# def watchdog(killQueue):
+#     pid_to_kill = None
+#     while True:
+#         if not killQueue.empty():
+#             pid_to_kill = killQueue.get()
+#         if not :
+#             os.kill(pid_to_kill, signal.SIGKILL)
+#             killQueue.close()
+#             return
+#         time.sleep(10)
+
+def attemptKill(plugin):
+    try:
+        os.kill(plugin["worker"], signal.SIGKILL)
+    except Exception as e:
+        print 'Error whilst killing worker thread...%s' % e
 
 
 class AdPythonPlugin(object):   
@@ -63,11 +84,13 @@ class AdPythonPlugin(object):
         # self.log is the logger associated with AdPythonPlugin, copy it
         # and define it as the logger just for this instance...
         self.log = self.log
-        self._params["retry"] = True
         self._params["worker"] = 0
         self.inputQueue = None
         self.resultQueue = None
         self.processArrayProcess = None
+        self.watchdogProcess = None
+        atexit.register(attemptKill, (self,))
+        self.initWatchdogProcess()
         self.initArrayProcess()
 
     # get a param value
@@ -97,12 +120,19 @@ class AdPythonPlugin(object):
 
     # called when parameter list changes
 
+    def initWatchdogProcess(self):
+        watchdogKillQueue = multiprocessing.Queue()
+        self.watchdogProcess = multiprocessing.Process(target=watchdog, args=(watchdogKillQueue,))
+        self.watchdogProcess.daemon = True
+        self.log.debug("spawned watchdog process: %s" % self.watchdogProcess)
+        self.watchdogProcess.start()
+
     def initArrayProcess(self):
         self.inputQueue = multiprocessing.Queue()
         self.resultQueue = multiprocessing.Queue()
         self.processArrayProcess = multiprocessing.Process(target=processArrayFromQueue, args=(self,))
         self.processArrayProcess.daemon = True
-        print "spawned: %s" % self.processArrayProcess
+        self.log.debug("spawned worker: %s" % self.processArrayProcess)
         self.processArrayProcess.start()
 
         while self.resultQueue.empty():
@@ -110,17 +140,17 @@ class AdPythonPlugin(object):
             time.sleep(0.001)
         (workerId, statusMessage) = self.resultQueue.get()
         self["worker"] = workerId
-        print("worker pid is %s" % workerId)
+        self.log.info("new worker pid is %s" % workerId)
 
     def endArrayProcess(self):
         self.inputQueue.close()
         self.resultQueue.close()
         self.processArrayProcess.terminate()
         if self["worker"] != 0:
-            print("killing %s..." % self["worker"])
+            self.log.info("killing %s..." % self["worker"])
             os.kill(self["worker"], signal.SIGKILL)
         time.sleep(0.01)
-        print "killed: %s" % self.processArrayProcess
+        self.log.info("killed: %s" % self.processArrayProcess)
 
     def abortProcessing(self):
         self.endArrayProcess()
@@ -140,13 +170,18 @@ class AdPythonPlugin(object):
     # default paramChanged does nothing
     def paramChanged(self):
         pass
-    
+
+    def processArrayFallback(self, arr, attr):
+        # child class can implement more useful behaviour
+        return arr
+
     # called when a new array is generated
     def _processArray(self, arr, attr):
         try:
             # Tell numpy that it does not own the data in arr, so it is read only
             # This should really be done at the C layer, but it's much easier here!        
             arr.flags.writeable = False
+            self._attr = attr  # input dict of attributes is mutated instead of returned
             self.inputQueue.put((arr, attr, self._params))
         except:
             # Log the exception in the logger as the C caller will throw away 
@@ -158,10 +193,18 @@ class AdPythonPlugin(object):
         return not self.resultQueue.empty()
 
     def getResult(self):
-        arr, attr, updated_params = self.resultQueue.get()
-        for k, v in updated_params.items():
-            self[k] = v
-        return arr, attr
+        try:
+            arr, attr, updated_params = self.resultQueue.get()
+            for k, v in attr.items():
+                self._attr[k] = v  # input dict of attributes is mutated instead of returned
+            for k, v in updated_params.items():
+                self[k] = v
+            return arr
+        except Exception as e:
+            self.log.exception('Error getting array result from queue: %s' % e)
+            return None
+
+
 
     # called when run offline
     def runOffline(self, **ranges):
