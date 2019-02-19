@@ -7,6 +7,7 @@ except:
     pass
 
 import imp, logging, numpy, multiprocessing, time, os, signal
+from Queue import Empty
 
 logging.basicConfig(format='%(asctime)s %(levelname)8s %(name)8s %(filename)s:%(lineno)d: %(message)s', level=logging.INFO)
 
@@ -45,12 +46,17 @@ def processArrayFromQueue(plugin):
             time.sleep(0.001)
         else:
             (arr, attr, updated_params) = plugin.inputQueue.get()
-            if arr.shape == (1,) and arr[0] == "blue pill":
+            if not isinstance(arr, numpy.ndarray) and arr == "exit":
+                plugin.arrayProcessExited.set()
                 return
             for k, v in updated_params.items():
                 plugin._params[k] = v
             new_array = plugin.processArray(arr, attr)
-            plugin.resultQueue.put((new_array, attr, plugin._params))
+            try:
+                plugin.resultQueue.put((new_array, attr, plugin._params))
+            except AssertionError:
+                # result queue was closed by the main thread, exit
+                return
 
 
 class AdPythonPlugin(object):   
@@ -66,10 +72,14 @@ class AdPythonPlugin(object):
         # self.log is the logger associated with AdPythonPlugin, copy it
         # and define it as the logger just for this instance...
         self.log = self.log
-        self._params["worker"] = 0
+        self._timeout = None
+        self._worker = 0
         self.inputQueue = None
         self.resultQueue = None
         self.processArrayProcess = None
+        self.arrayProcessExited = None
+        self.arrayProcessRunning = None
+        self.notAwaitingResult = multiprocessing.Event()
         self.initArrayProcess()
 
     # get a param value
@@ -98,33 +108,55 @@ class AdPythonPlugin(object):
         return iter(self._params)
 
     def initArrayProcess(self):
+        print("starting new workers!")
+        self.notAwaitingResult.set()
+        self.arrayProcessExited = multiprocessing.Event()
+        self.arrayProcessRunning = multiprocessing.Event()
+        print("old rQ: %s" % self.resultQueue)
+        print("old iQ: %s" % self.inputQueue)
+        oldInput = self.inputQueue
+        oldResults = self.resultQueue
+        self.inputQueue = None
+        self.resultQueue = None
+        print("got rid of both queues, making new ones")
         self.inputQueue = multiprocessing.Queue()
         self.resultQueue = multiprocessing.Queue()
+        print("new rQ: %s" % self.resultQueue)
+        print("new iQ: %s" % self.inputQueue)
         self.processArrayProcess = multiprocessing.Process(target=processArrayFromQueue, args=(self,))
         self.processArrayProcess.daemon = True
+        print("spawned worker: %s" % self.processArrayProcess)
         self.log.debug("spawned worker: %s" % self.processArrayProcess)
         self.processArrayProcess.start()
-
-        while self.resultQueue.empty():
-            # wait for init confirmation in result queue
-            time.sleep(0.001)
         (workerId, statusMessage) = self.resultQueue.get()
-        self["worker"] = workerId
+        self._worker = workerId
+        print("new worker pid is %s" % workerId)
         self.log.info("new worker pid is %s" % workerId)
+        self.arrayProcessRunning.set()
 
-    def endArrayProcess(self):
+    def endArrayProcess(self, close_result_queue=False):
+        self.arrayProcessRunning.clear()
+        print("beginning endArrayProcess!")
+        self.inputQueue.put(["exit", None, None])
+        self.resultQueue.put(["aborted:%s" % self._worker, None, None])
+        print("wait for exit messages to be actioned")
+        self.notAwaitingResult.wait()
+        didExit = self.arrayProcessExited.wait(timeout=0.01)
+        print("sleep done, closing queues and killing stuff")
         self.inputQueue.close()
-        self.resultQueue.close()
         self.processArrayProcess.terminate()
-        if self["worker"] != 0:
-            self.log.info("killing %s..." % self["worker"])
-            os.kill(self["worker"], signal.SIGKILL)
-        time.sleep(0.01)
+        if self._worker != 0 and not didExit:
+            self.log.info("worker %s still running, sending SIG_KILL" % self._worker)
+            os.kill(self._worker, signal.SIGKILL)
+        else:
+            self.log.info("worker %s exited" % self._worker)
+        if close_result_queue:
+            self.resultQueue.close()
         self.log.info("killed: %s" % self.processArrayProcess)
+        print("finished killing!")
 
-    def abortProcessing(self):
+    def abortProcessing(self, hard=False):
         self.endArrayProcess()
-        time.sleep(0.001)
         self.initArrayProcess()
 
     # called when parameter list changes
@@ -142,39 +174,73 @@ class AdPythonPlugin(object):
     def paramChanged(self):
         pass
 
+    # Method called when array processing fails, default does nothing
     def processArrayFallback(self, arr, attr):
-        # child class can implement more useful behaviour
         return arr
 
     # called when a new array is generated
-    def _processArray(self, arr, attr):
+    def _processArray(self, arr, attr, timeout=None):
+        self.notAwaitingResult.clear()
+        if timeout == 0:
+            timeout = None
         try:
             # Tell numpy that it does not own the data in arr, so it is read only
             # This should really be done at the C layer, but it's much easier here!        
             arr.flags.writeable = False
-            self._attr = attr  # input dict of attributes is mutated instead of returned
+            # input dict of attributes is mutated instead of returned, hold on to ref so we
+            # can update it when we get result back from the worker
+            self._attr = attr
+            if not self.arrayProcessRunning.wait(timeout=timeout):
+                self.log.exception("Worker thread not running and timeout expired waiting for a new one")
+                raise AssertionError
+            print("my rQ: %s" % self.resultQueue)
+            print("my iQ: %s" % self.inputQueue)
             self.inputQueue.put((arr, attr, self._params))
-        except:
-            # Log the exception in the logger as the C caller will throw away 
-            # the exception text        
+            return self.getResult(timeout)
+        except Empty:
+            # Worker didn't return processed array in time, call fallback method in main thread
+            self.log.info("Timeout processing array; using fallback method")
+            self.abortProcessing()
+            return self.processArrayFallback(arr, attr)
+        except AssertionError:
+            # Queue was closed, abort was called in the C++ thread
+            self.log.info("Abort called whilst processing array; using fallback method")
+            return self.processArrayFallback(arr, attr)
+        except Exception:
+            # Log the exception in the logger as the C caller will throw away
+            # the exception text
             self.log.exception("Error calling processArray()")
             raise
+        finally:
+            self.notAwaitingResult.clear()
 
     def hasResult(self):
         return not self.resultQueue.empty()
 
-    def getResult(self):
+    def getResult(self, timeout=None):
+        if timeout is not None:
+            timeout /= 1000.0
         try:
-            arr, attr, updated_params = self.resultQueue.get()
+            arr, attr, updated_params = self.resultQueue.get(timeout=timeout)
+            if not isinstance(arr, numpy.ndarray) and arr.split(':')[0] == "aborted":
+                self.resultQueue.close()
+                raise AssertionError("Abort was called on Worker")
             for k, v in attr.items():
                 self._attr[k] = v  # input dict of attributes is mutated instead of returned
             for k, v in updated_params.items():
                 self[k] = v
             return arr
+        except Empty:
+            # Worker didn't return processed array in time, call fallback method in main thread
+            raise
+        except AssertionError:
+            # Queue was closed, abort was called in the C++ thread
+            raise
         except Exception as e:
             self.log.exception('Error getting array result from queue: %s' % e)
             return None
-
+        finally:
+            self.notAwaitingResult.set()
 
 
     # called when run offline

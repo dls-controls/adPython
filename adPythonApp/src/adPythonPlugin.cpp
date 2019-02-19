@@ -181,31 +181,7 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     this->unlock();
     
     // Make the function call
-    //TODO: Change this to call into python thread and await response/abort call from asyn param
-    PyObject_CallObject(this->pProcessArray, this->pProcessArgs);
-    PyObject *processingDone = PyObject_CallObject(this->pHasResult, NULL);
-    PyObject *pValue;
-    int processingTimeout;
-    int doAbort = 0;
-    epicsTimeStamp array_proc_start, array_proc_now;
-    epicsTimeGetCurrent(&array_proc_start);
-    getIntegerParam(adPythonProcTimeout, &processingTimeout);
-    if (processingTimeout == 0) {
-        processingTimeout = INT_MAX;
-    }
-    while (!PyObject_IsTrue(processingDone) && doAbort == 0) {
-        processingDone = PyObject_CallObject(this->pHasResult, NULL);
-        // epicsThreadSleep(0.001);
-        getIntegerParam(adPythonProcAbort, &doAbort);
-        epicsTimeGetCurrent(&array_proc_now);
-        doAbort = doAbort || epicsTimeDiffInSeconds(&array_proc_now, &array_proc_start)*1000 > processingTimeout;
-    }
-    if (doAbort != 0) {
-        PyObject_CallObject(this->pAbortProcessing, NULL);
-        pValue = PyObject_CallObject(this->pProcessArrayFallback, this->pProcessArgs);
-    } else {
-        pValue = PyObject_CallObject(this->pGetResult, NULL);
-    }
+    PyObject *pValue = PyObject_CallObject(this->pProcessArray, this->pProcessArgs);
 
     // Lock back up
     this->lock();
@@ -251,8 +227,8 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
 asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
     int status = asynSuccess;
     int param = pasynUser->reason;
-    if (param == adPythonLoad || 
-            (this->nextParam && param >= adPythonUserParams[0])) {
+    if (param == adPythonLoad ||
+        (this->nextParam && param >= adPythonUserParams[0])) {
         // We have to modify our python dict to match our param list
         // Note: to avoid deadlocks we should always take locks in order:
         //  dictMutex, then GIL, then this->lock
@@ -261,9 +237,9 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
         epicsMutexLock(this->dictMutex);
         // Make sure we're allowed to use the python API
         PyEval_RestoreThread(this->threadState);
-        // Now call the bast class to write the value to the param list
-        this->lock();        
-        status |= NDPluginDriver::writeInt32(pasynUser, value);               
+        // Now call the base class to write the value to the param list
+        this->lock();
+        status |= NDPluginDriver::writeInt32(pasynUser, value);
         if (param == adPythonLoad) {
             // signal that we have started loading the python instance
             callParamCallbacks();
@@ -276,7 +252,19 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
         }
         // release GIL and dict Mutex
         this->threadState = PyEval_SaveThread();
-        epicsMutexUnlock(this->dictMutex);    
+        epicsMutexUnlock(this->dictMutex);
+    } else if (param == adPythonProcAbort) {
+        this->unlock();
+
+        if (!is_in_processCallbacks) {
+            PyEval_RestoreThread(this->threadState);
+        } else {
+            PyEval_AcquireLock();
+        }
+        PyObject_CallObject(this->pAbortProcessing, NULL);
+        this->lock();
+        PyEval_ReleaseLock();
+        //this->threadState = PyEval_SaveThread();
     } else {
         status |= NDPluginDriver::writeInt32(pasynUser, value);
     }
@@ -453,7 +441,7 @@ asynStatus adPythonPlugin::makePyInst() {
     Py_XDECREF(this->pParams);
     this->pParams = PyObject_GetAttrString(this->pInstance, "_params");
     if (this->pParams == NULL) Bad("Can't get _params ref");
-    
+
     // Can reset state now
     this->pluginState = GOOD;
     setIntegerParam(adPythonState, this->pluginState);
@@ -497,11 +485,13 @@ asynStatus adPythonPlugin::wrapArray(NDArray *pArray) {
     PyObject* pValue = PyArray_SimpleNewFromData(pArray->ndims, npy_dims, 
         npy_fmt, pArray->pData);   
     if (pValue == NULL) Bad("Cannot make numpy array");
-    
+
+    int processingTimeout;
+    getIntegerParam(adPythonProcTimeout, &processingTimeout);
     // Construct argument list, don't increment pValue so it is destroyed with
     // pProcessArgs
     Py_XDECREF(this->pProcessArgs);
-    this->pProcessArgs = Py_BuildValue("(NO)", pValue, this->pAttrs);
+    this->pProcessArgs = Py_BuildValue("(NOi)", pValue, this->pAttrs, processingTimeout);
     if (this->pProcessArgs == NULL) {
         Py_DECREF(pValue);    
         Bad("Cannot build tuple for processArray()");
