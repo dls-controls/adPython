@@ -6,5 +6,6 @@ DIRS := $(DIRS) $(filter-out $(DIRS), $(wildcard *db*))
 DIRS := $(DIRS) $(filter-out $(DIRS), $(wildcard *Db*))
 DIRS := $(DIRS) $(filter-out $(DIRS), $(wildcard *opi*))
 DIRS := $(DIRS) $(filter-out $(DIRS), $(wildcard protocol))
+DIRS := $(DIRS) $(filter-out $(DIRS), $(wildcard scripts))
 include $(TOP)/configure/RULES_DIRS
 

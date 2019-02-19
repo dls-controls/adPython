@@ -31,3 +31,73 @@ CROSS_COMPILER_TARGET_ARCHS =
 # You must rebuild in the iocBoot directory for this to
 #   take effect.
 #IOCS_APPL_TOP = </IOC/path/to/application/top>
+
+# Set this to the Python major-minor version string used in the
+#   installed Python filenames (e.g. "2.7" in
+#   "/usr/lib/python2.7"). This can vary by OS (e.g. for Python
+#   2.7.15 on Windows, it is "27", but on a UNIX-like OS, it is
+#   "2.7").
+PYTHON_VERSION = 2.7
+
+# Set this to the Python prefix (e.g. /opt/python-2.7.15). If
+#   not set, the system Python will be used.
+PYTHON_PREFIX = $(TOOLS_BASE)/Python/2-7-3/prefix
+
+# Set this to the Python library directory. This is the
+#   directory containing the libpython$(PYTHON_VERSION) library.
+#   This can vary by OS (e.g. for Python 2.7.15 on Windows, the
+#   directory filename is "libs", but on a UNIX-like OS, it is
+#   "lib").
+# This is only used if PYTHON_PREFIX is not empty.
+PYTHON_LIB = $(PYTHON_PREFIX)/lib
+
+# Set this to the Python include directory. This is the
+#   directory containing the Python C header files such as
+#   Python.h. This can vary by OS (e.g. for Python 2.7.15 on
+#   Windows, the relative pathname is "include", but on a
+#   UNIX-like OS, it is "include/python$(PYTHON_VERSION)").
+# This is only used if PYTHON_PREFIX is not empty.
+PYTHON_INCLUDE = $(PYTHON_PREFIX)/include/python$(PYTHON_VERSION)
+
+# Set this to the location of the Python site-packages. This can
+#   vary by OS (e.g. for Python 2.7.15 on Windows, the relative
+#   pathname is "Lib/site-packages", but on a UNIX-like OS, it
+#   is "lib/python$(PYTHON_VERSION)/site-packages").
+# This is only used if PYTHON_PREFIX is not empty.
+PYTHON_SITE_PACKAGES = $(PYTHON_PREFIX)/lib/python$(PYTHON_VERSION)/site-packages
+
+# Set this to the NumPy include directory. The directory can be
+#   determined by running
+#     python adPythonApp/src/adPythonPlugin.py
+#   where "python" runs the executable interpreter of the Python
+#   that will be embedded in adPython.
+# This is only used if PYTHON_PREFIX is not empty.
+NUMPY_INCLUDE = $(PYTHON_SITE_PACKAGES)/numpy/core/include
+
+# Set this to the delimiter character for path lists. If empty,
+#   it will be set automatically based on OS_CLASS.
+PATH_LIST_SEPARATOR =
+ifeq ($(PATH_LIST_SEPARATOR),)
+  ifeq ($(OS_CLASS), WIN32)
+    PATH_LIST_SEPARATOR = ;
+  else
+    PATH_LIST_SEPARATOR = :
+  endif
+endif
+
+# This is automatically set to PYTHON_SITE_PACKAGES followed by
+#   PATH_LIST_SEPARATOR if PYTHON_PREFIX is not empty. If
+#   PYTHON_PREFIX is empty, this is automatically set to the
+#   empty string.
+_PYTHON_SITE_PACKAGES_AND =
+ifneq ($(PYTHON_PREFIX),)
+  _PYTHON_SITE_PACKAGES_AND = $(PYTHON_SITE_PACKAGES)$(PATH_LIST_SEPARATOR)
+endif
+
+# Set this to the locations of adPython modules, adPython plugin
+#   scripts, and modules needed by those. This will be appended
+#   to the module search path of the embedded Python instance.
+#   This has the same format as the PYTHONPATH environment
+#   variable (i.e. a colon-separated list of paths, except on
+#   Windows where the list is instead semicolon-separated).
+ADPYTHON_MODULE_PATH = $(_PYTHON_SITE_PACKAGES_AND)$(abspath $(INSTALL_LOCATION)/plugin-scripts)
