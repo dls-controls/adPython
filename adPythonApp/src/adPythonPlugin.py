@@ -1,5 +1,9 @@
 # our base class requires numpy, so make sure it's on the path here
 # this step is only needed if numpy is an egg installed multi-version
+import sys
+print('~~~~~~~~~~~~~~~~')
+print sys.path
+print('****************')
 try:
     from pkg_resources import require
     require("numpy")

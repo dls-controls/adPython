@@ -120,6 +120,7 @@ void adPythonPlugin::initThreads()
     char buffer[BIGBUFFER];
     snprintf(buffer, sizeof(buffer), "%s%s%s", Py_GetPath(),
         PATH_LIST_SEPARATOR, DATADIRS);
+    std::cout << "my path is: " << buffer << "\n";
     PySys_SetPath(buffer);
     
     // Import our supporting library
@@ -265,6 +266,7 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
         // Release dict mutex
         epicsMutexUnlock(this->dictMutex);
     } else if (param == adPythonProcAbort) {
+        PyGILState_STATE gstate;
         this->unlock();
         gstate = PyGILState_Ensure();
         PyObject_CallObject(this->pAbortProcessing, NULL);
