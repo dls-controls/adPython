@@ -41,7 +41,7 @@ public:
     virtual asynStatus writeOctet(asynUser *pasynUser, const char *value, size_t maxChars, size_t *nActual);
 
     PyObject *pEndProcess;
-    PyThreadState *threadState;
+    int pluginState;
 
 protected:
     /** These are the values of our parameters */
@@ -80,7 +80,7 @@ private:
 
     PyObject *pInstance, *pParams, *pProcessArray, *pParamChanged, *pMakePyInst, *pAttrs, *pProcessArgs, *pAbortProcessing, *pHasResult, *pGetResult, *pProcessArrayFallback;
     NDAttributeList *pFileAttributes;
-    int nextParam, pluginState;
+    int nextParam;
     epicsMutexId dictMutex;
 };
 

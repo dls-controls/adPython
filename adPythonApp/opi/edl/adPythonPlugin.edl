@@ -3,10 +3,10 @@ beginScreenProperties
 major 4
 minor 0
 release 1
-x 546
-y 394
+x 2235
+y 713
 w 390
-h 130
+h 160
 font "arial-bold-r-12.0"
 ctlFont "arial-bold-r-12.0"
 btnFont "arial-bold-r-12.0"
@@ -34,7 +34,7 @@ release 0
 x 0
 y 0
 w 390
-h 130
+h 160
 lineColor index 5
 fill
 fillColor index 5
@@ -49,7 +49,7 @@ release 0
 x 5
 y 15
 w 380
-h 110
+h 140
 lineColor index 14
 fill
 fillColor index 3
@@ -75,25 +75,6 @@ autoSize
 border
 endObjectProperties
 
-# (Textupdate)
-object TextupdateClass
-beginObjectProperties
-major 10
-minor 0
-release 0
-x 140
-y 100
-w 70
-h 20
-controlPv "$(P)$(R)Time_RBV"
-fgColor index 16
-fgAlarm
-bgColor index 10
-fill
-font "arial-bold-r-12.0"
-fontAlign "center"
-endObjectProperties
-
 # (Static Text)
 object activeXTextClass
 beginObjectProperties
@@ -101,15 +82,15 @@ major 4
 minor 1
 release 1
 x 10
-y 100
-w 125
+y 105
+w 95
 h 20
 font "arial-bold-r-12.0"
 fgColor index 14
 bgColor index 3
 useDisplayBg
 value {
-  "Plugin run time (ms)"
+  "Plugin timeout"
 }
 endObjectProperties
 
@@ -120,7 +101,7 @@ major 4
 minor 6
 release 0
 x 185
-y 75
+y 80
 w 100
 h 20
 controlPv "$(P)$(R)Classname_RBV"
@@ -142,7 +123,7 @@ major 4
 minor 6
 release 0
 x 80
-y 75
+y 80
 w 100
 h 20
 controlPv "$(P)$(R)Classname"
@@ -216,9 +197,9 @@ major 4
 minor 1
 release 1
 x 10
-y 20
+y 15
 w 370
-h 15
+h 20
 font "arial-bold-r-12.0"
 fgColor index 14
 bgColor index 3
@@ -235,7 +216,7 @@ major 4
 minor 1
 release 1
 x 10
-y 75
+y 80
 w 80
 h 20
 font "arial-bold-r-12.0"
@@ -254,7 +235,7 @@ major 4
 minor 1
 release 1
 x 225
-y 100
+y 130
 w 85
 h 20
 font "arial-bold-r-12.0"
@@ -273,7 +254,7 @@ major 10
 minor 0
 release 0
 x 310
-y 100
+y 130
 w 70
 h 20
 controlPv "$(P)$(R)PluginState_RBV"
@@ -292,7 +273,7 @@ major 4
 minor 0
 release 0
 x 360
-y 75
+y 80
 w 20
 h 20
 controlPv "$(P)$(R)ReadFile_RBV"
@@ -310,7 +291,7 @@ major 4
 minor 1
 release 0
 x 290
-y 75
+y 80
 w 65
 h 20
 fgColor index 25
@@ -322,6 +303,113 @@ controlPv "$(P)$(R)ReadFile"
 pressValue "1"
 onLabel "Read File"
 offLabel "Read File"
+3d
+useEnumNumeric
+font "arial-bold-r-12.0"
+endObjectProperties
+
+# (Static Text)
+object activeXTextClass
+beginObjectProperties
+major 4
+minor 1
+release 1
+x 10
+y 130
+w 95
+h 20
+font "arial-bold-r-12.0"
+fgColor index 14
+bgColor index 3
+useDisplayBg
+value {
+  "Plugin run time"
+}
+endObjectProperties
+
+# (Textupdate)
+object TextupdateClass
+beginObjectProperties
+major 10
+minor 0
+release 0
+x 110
+y 130
+w 70
+h 20
+controlPv "$(P)$(R)Time_RBV"
+fgColor index 16
+fgAlarm
+bgColor index 10
+fill
+font "arial-bold-r-12.0"
+fontAlign "center"
+endObjectProperties
+
+# (Text Control)
+object activeXTextDspClass
+beginObjectProperties
+major 4
+minor 6
+release 0
+x 110
+y 105
+w 70
+h 20
+controlPv "$(P)$(R)Timeout"
+font "helvetica-medium-r-10.0"
+fgColor index 25
+bgColor index 3
+editable
+motifWidget
+limitsFromDb
+nullColor index 0
+useKp
+file
+useHexPrefix
+newPos
+inputFocusUpdates
+objType "controls"
+endObjectProperties
+
+# (Textupdate)
+object TextupdateClass
+beginObjectProperties
+major 10
+minor 0
+release 0
+x 185
+y 105
+w 70
+h 20
+controlPv "$(P)$(R)Timeout_RBV"
+fgColor index 16
+fgAlarm
+bgColor index 10
+fill
+font "arial-bold-r-12.0"
+fontAlign "center"
+endObjectProperties
+
+# (Message Button)
+object activeMessageButtonClass
+beginObjectProperties
+major 4
+minor 1
+release 0
+x 290
+y 105
+w 90
+h 20
+fgColor index 25
+onColor index 4
+offColor index 4
+topShadowColor index 1
+botShadowColor index 11
+controlPv "$(P)$(R)AbortProcessing"
+pressValue "1"
+onLabel "Abort"
+offLabel "Abort"
 3d
 useEnumNumeric
 font "arial-bold-r-12.0"

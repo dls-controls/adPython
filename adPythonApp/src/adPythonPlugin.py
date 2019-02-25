@@ -1,9 +1,5 @@
 # our base class requires numpy, so make sure it's on the path here
 # this step is only needed if numpy is an egg installed multi-version
-import sys
-print('~~~~~~~~~~~~~~~~')
-print sys.path
-print('****************')
 try:
     from pkg_resources import require
     require("numpy")
@@ -51,6 +47,7 @@ def processArrayFromQueue(plugin):
         else:
             (arr, attr, updated_params) = plugin.inputQueue.get()
             if not isinstance(arr, numpy.ndarray) and arr == "exit":
+                plugin.resultQueue.close()
                 plugin.arrayProcessExited.set()
                 return
             for k, v in updated_params.items():
@@ -81,9 +78,10 @@ class AdPythonPlugin(object):
         self.inputQueue = None
         self.resultQueue = None
         self.processArrayProcess = None
-        self.arrayProcessExited = None
-        self.arrayProcessRunning = None
+        self.arrayProcessExited = None    # semaphore used bt worker to indicate it has exited
+        self.arrayProcessRunning = multiprocessing.Event()
         self.notAwaitingResult = multiprocessing.Event()
+        self.notAwaitingResult.set()
         self.initArrayProcess()
 
     # get a param value
@@ -112,54 +110,36 @@ class AdPythonPlugin(object):
         return iter(self._params)
 
     def initArrayProcess(self):
-        print("starting new workers!")
-        self.notAwaitingResult.set()
         self.arrayProcessExited = multiprocessing.Event()
-        self.arrayProcessRunning = multiprocessing.Event()
-        print("old rQ: %s" % self.resultQueue)
-        print("old iQ: %s" % self.inputQueue)
         oldInput = self.inputQueue
         oldResults = self.resultQueue
-        self.inputQueue = None
-        self.resultQueue = None
-        print("got rid of both queues, making new ones")
         self.inputQueue = multiprocessing.Queue()
         self.resultQueue = multiprocessing.Queue()
-        print("new rQ: %s" % self.resultQueue)
-        print("new iQ: %s" % self.inputQueue)
         self.processArrayProcess = multiprocessing.Process(target=processArrayFromQueue, args=(self,))
         self.processArrayProcess.daemon = True
-        print("spawned worker: %s" % self.processArrayProcess)
         self.log.debug("spawned worker: %s" % self.processArrayProcess)
         self.processArrayProcess.start()
         (workerId, statusMessage) = self.resultQueue.get()
         self._worker = workerId
-        print("new worker pid is %s" % workerId)
         self.log.info("new worker pid is %s" % workerId)
         self.arrayProcessRunning.set()
 
-    def endArrayProcess(self, close_result_queue=False):
+    def endArrayProcess(self):
         self.arrayProcessRunning.clear()
-        print("beginning endArrayProcess!")
         self.inputQueue.put(["exit", None, None])
         self.resultQueue.put(["aborted:%s" % self._worker, None, None])
-        print("wait for exit messages to be actioned")
         self.notAwaitingResult.wait()
         didExit = self.arrayProcessExited.wait(timeout=0.01)
-        print("sleep done, closing queues and killing stuff")
         self.inputQueue.close()
         self.processArrayProcess.terminate()
-        if self._worker != 0 and not didExit:
-            self.log.info("worker %s still running, sending SIG_KILL" % self._worker)
-            os.kill(self._worker, signal.SIGKILL)
-        else:
+        os.kill(self._worker, signal.SIGKILL)
+        if didExit:
             self.log.info("worker %s exited" % self._worker)
-        if close_result_queue:
+        else:
+            self.log.info("worker %s killed" % self._worker)
             self.resultQueue.close()
-        self.log.info("killed: %s" % self.processArrayProcess)
-        print("finished killing!")
 
-    def abortProcessing(self, hard=False):
+    def abortProcessing(self):
         self.endArrayProcess()
         self.initArrayProcess()
 
@@ -184,7 +164,6 @@ class AdPythonPlugin(object):
 
     # called when a new array is generated
     def _processArray(self, arr, attr, timeout=None):
-        self.notAwaitingResult.clear()
         if timeout == 0:
             timeout = None
         try:
@@ -196,9 +175,8 @@ class AdPythonPlugin(object):
             self._attr = attr
             if not self.arrayProcessRunning.wait(timeout=timeout):
                 self.log.exception("Worker thread not running and timeout expired waiting for a new one")
-                raise AssertionError
-            print("my rQ: %s" % self.resultQueue)
-            print("my iQ: %s" % self.inputQueue)
+                raise AssertionError()
+            self.notAwaitingResult.clear()
             self.inputQueue.put((arr, attr, self._params))
             return self.getResult(timeout)
         except Empty:
@@ -216,7 +194,7 @@ class AdPythonPlugin(object):
             self.log.exception("Error calling processArray()")
             raise
         finally:
-            self.notAwaitingResult.clear()
+            self.notAwaitingResult.set()
 
     def hasResult(self):
         return not self.resultQueue.empty()
@@ -227,7 +205,6 @@ class AdPythonPlugin(object):
         try:
             arr, attr, updated_params = self.resultQueue.get(timeout=timeout)
             if not isinstance(arr, numpy.ndarray) and arr.split(':')[0] == "aborted":
-                self.resultQueue.close()
                 raise AssertionError("Abort was called on Worker")
             for k, v in attr.items():
                 self._attr[k] = v  # input dict of attributes is mutated instead of returned

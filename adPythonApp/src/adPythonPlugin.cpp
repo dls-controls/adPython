@@ -72,7 +72,7 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
     this->pAttrs = NULL;
     this->pProcessArgs = NULL;
     this->nextParam = 0;
-    this->pluginState = 0;
+    this->pluginState = -1;
     this->pFileAttributes = new NDAttributeList;
    
     // Create the base class parameters (our python class may make some more)
@@ -91,11 +91,11 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
 
 void endProcessingThread(void* object) {
     adPythonPlugin* plugin  = (adPythonPlugin*) object;
-    PyEval_RestoreThread(plugin->threadState);
-    plugin->lock();
-    PyObject_CallObject(plugin->pEndProcess, NULL);
-    plugin->unlock();
-    plugin->threadState = PyEval_SaveThread();
+    if (plugin->pluginState != UGLY && plugin->pluginState != -1) { // don't attempt to kill if plugin didn't load
+        PyGILState_STATE gstate = PyGILState_Ensure();
+        PyObject_CallObject(plugin->pEndProcess, NULL);
+        PyGILState_Release(gstate);
+    }
 }
 
 /** Init function called once immediately after class instantiation. Starts the
@@ -103,7 +103,9 @@ void endProcessingThread(void* object) {
  */
 void adPythonPlugin::initThreads()
 {
-    PyGILState_STATE gstate;
+    char buffer[BIGBUFFER];
+    snprintf(buffer, sizeof(buffer), "PYTHONPATH=%s", DATADIRS);
+    putenv(buffer);
 
     // Initialise python
     if (!Py_IsInitialized()) {
@@ -112,16 +114,16 @@ void adPythonPlugin::initThreads()
         // Release the GIL
         PyEval_SaveThread();
     }
-    
+
     // Acquire the GIL and set up non-python-created thread access
-    gstate = PyGILState_Ensure();
+    PyGILState_STATE gstate = PyGILState_Ensure();
 
     // Tell python where to find adPythonPlugin.py and other scripts
-    char buffer[BIGBUFFER];
-    snprintf(buffer, sizeof(buffer), "%s%s%s", Py_GetPath(),
-        PATH_LIST_SEPARATOR, DATADIRS);
-    std::cout << "my path is: " << buffer << "\n";
-    PySys_SetPath(buffer);
+//    char buffer[BIGBUFFER];
+//    snprintf(buffer, sizeof(buffer), "%s%s%s", Py_GetPath(),
+//        PATH_LIST_SEPARATOR, DATADIRS);
+//    std::cout << "my path is: " << buffer << "\n";
+//    PySys_SetPath(buffer);
     
     // Import our supporting library
     this->importAdPythonModule();
@@ -153,8 +155,6 @@ void adPythonPlugin::initThreads()
   * Called with this->lock taken
   */
 void adPythonPlugin::processCallbacks(NDArray *pArray) {
-    PyGILState_STATE gstate;
-
     // First call the base class method
     NDPluginDriver::processCallbacks(pArray);
 
@@ -169,7 +169,7 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     epicsMutexLock(this->dictMutex);
 
     // Acquire the GIL and set up non-python-created thread access
-    gstate = PyGILState_Ensure();
+    PyGILState_STATE gstate = PyGILState_Ensure();
     this->lock(); 
 
     // Store the time at the beginning of processing for profiling 
@@ -187,7 +187,6 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     
     // Make the function call
     PyObject *pValue = PyObject_CallObject(this->pProcessArray, this->pProcessArgs);
-
     // Lock back up
     this->lock();
 
@@ -205,7 +204,6 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     epicsTimeGetCurrent(&ts_end);
     setDoubleParam(adPythonTime, epicsTimeDiffInSeconds(&ts_end, &ts_start)*1000);
     callParamCallbacks();
-
     // Unlock
     this->unlock();   
     // Release the GIL and tear down non-python-created thread access
@@ -219,7 +217,7 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     }
     
     // called with the lock taken, so lock back up here
-    this->lock();        
+    this->lock();
 }
 
 /** Called when asyn clients call pasynInt32->write().
@@ -237,7 +235,6 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
 
     if (param == adPythonLoad || 
             (this->nextParam && param >= adPythonUserParams[0])) {
-        PyGILState_STATE gstate;
         // We have to modify our python dict to match our param list
         // Note: to avoid deadlocks we should always take locks in order:
         //  dictMutex, then GIL, then this->lock
@@ -246,8 +243,8 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
         epicsMutexLock(this->dictMutex);
 
         // Acquire the GIL and set up non-python-created thread access
-        gstate = PyGILState_Ensure();
-        // Now call the bast class to write the value to the param list
+        PyGILState_STATE gstate = PyGILState_Ensure();
+        // Now call the base class to write the value to the param list
         this->lock();        
         status |= NDPluginDriver::writeInt32(pasynUser, value);
 
@@ -256,6 +253,7 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
             callParamCallbacks();
             // reload our python instance, this does callParamCallbacks for is
             status |= setIntegerParam(param, 0);
+
             status |= this->makePyInst();
         } else {
             // our param lib has changed, so update the dict and reprocess
@@ -266,12 +264,15 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
         // Release dict mutex
         epicsMutexUnlock(this->dictMutex);
     } else if (param == adPythonProcAbort) {
-        PyGILState_STATE gstate;
+        // signal that we have started aborting
+        status |= NDPluginDriver::writeInt32(pasynUser, value);
+        status |= setIntegerParam(param, 0);
+        callParamCallbacks();
         this->unlock();
-        gstate = PyGILState_Ensure();
+        PyGILState_STATE gstate = PyGILState_Ensure();
         PyObject_CallObject(this->pAbortProcessing, NULL);
-        this->lock();
         PyGILState_Release(gstate);
+        this->lock();
     } else {
         status |= NDPluginDriver::writeInt32(pasynUser, value);
     }
@@ -291,7 +292,6 @@ asynStatus adPythonPlugin::writeFloat64(asynUser *pasynUser,
     int status = asynSuccess;
     int param = pasynUser->reason;
     if (this->nextParam && param >= adPythonUserParams[0]) {
-        PyGILState_STATE gstate;
         // We have to modify our python dict to match our param list
         // Note: to avoid deadlocks we should always take locks in order:
         //  dictMutex, then GIL, then this->lock
@@ -299,7 +299,7 @@ asynStatus adPythonPlugin::writeFloat64(asynUser *pasynUser,
         this->unlock();
         epicsMutexLock(this->dictMutex);
         // Acquire the GIL and set up non-python-created thread access
-        gstate = PyGILState_Ensure();
+        PyGILState_STATE gstate = PyGILState_Ensure();
         // Now call the bast class to write the value to the param list
         this->lock();        
         status |= NDPluginDriver::writeFloat64(pasynUser, value);                
@@ -330,7 +330,6 @@ asynStatus adPythonPlugin::writeOctet(asynUser *pasynUser, const char *value,
     int status = asynSuccess;
     int param = pasynUser->reason;
     if (this->nextParam && param >= adPythonUserParams[0]) {
-        PyGILState_STATE gstate;
         // We have to modify our python dict to match our param list
         // Note: to avoid deadlocks we should always take locks in order:
         //  dictMutex, then GIL, then this->lock
@@ -338,7 +337,7 @@ asynStatus adPythonPlugin::writeOctet(asynUser *pasynUser, const char *value,
         this->unlock();
         epicsMutexLock(this->dictMutex);
         // Acquire the GIL and set up non-python-created thread access
-        gstate = PyGILState_Ensure();
+        PyGILState_STATE gstate = PyGILState_Ensure();
         // Now call the bast class to write the value to the param list
         this->lock();        
         status |= NDPluginDriver::writeOctet(pasynUser, value, maxChars, nActual);                
@@ -406,7 +405,9 @@ asynStatus adPythonPlugin::makePyInst() {
     // Make tuple for makePyInst
     PyObject *pArgs = Py_BuildValue("sss", this->portName, filename, classname);
     if (pArgs == NULL) Bad("Can't build tuple for makePyInst()");
-           
+
+    endProcessingThread(this);
+
     // Create instance of this class, freeing the old one if it exists
     Py_XDECREF(this->pInstance);
     this->pInstance = PyObject_CallObject(this->pMakePyInst, pArgs);

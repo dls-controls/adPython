@@ -53,7 +53,7 @@ class Gaussian2DFitter(AdPythonPlugin):
                       Maxiter=20,
                       FitStatus="",
                       OverlayROI=0,
-                      OverlayElipse=0,
+                      Overlayellipse=0,
                       OverlayCross=0,
                       OutputType=0,
                       FitType=-1
@@ -72,7 +72,6 @@ class Gaussian2DFitter(AdPythonPlugin):
         # Called when the plugin gets a new array
         # arr is a numpy array
         # attr is an attribute dictionary that will be attached to the array
-        self.tempCounter += 1
         self["FitType"] = -1
         self["FitStatus"] = "Processing array..."
         # Convert the array to a float so that we do not overflow during processing.
@@ -91,10 +90,6 @@ class Gaussian2DFitter(AdPythonPlugin):
             s_y = 1.0
         else:
             try:
-                if self.tempCounter == 200:
-                    while True:
-                        pass
-                    self.tempCounter = 0
                 fit, error, results = doFit2dGaussian(
                     arr2, thinning=(self["FitThinning"], self["FitThinning"]), #self.FitThinning
                     window_size=self["FitWindowSize"], maxiter=self["Maxiter"], #self.FitWindowSize   self.maxiter
@@ -153,7 +148,6 @@ class Gaussian2DFitter(AdPythonPlugin):
                 ulima = (int(orig_x + axs * numpy.sin(theta)), int(orig_y - axs * numpy.cos(theta)))
                 llima = (int(orig_x - axs * numpy.sin(theta)), int(orig_y + axs * numpy.cos(theta)))
 
-
                 if is_inside_image_boundary(ulimb[0], ulimb[1], x_len, y_len):
                     overlay_cross[ulimb] = col
                 if is_inside_image_boundary(llimb[0], llimb[1], x_len, y_len):
@@ -165,10 +159,10 @@ class Gaussian2DFitter(AdPythonPlugin):
 
             return overlay_cross
 
-        def plot_elipse(image, orig_x, orig_y, sig_x, sig_y, theta, col):
-            '''Plots an elipse on the given axis of interest.'''
+        def plot_ellipse(image, orig_x, orig_y, sig_x, sig_y, theta, col):
+            '''Plots an ellipse on the given axis of interest.'''
             # Create an array of zeros the same size as the original image.
-            overlay_elipse = numpy.zeros_like(image)
+            overlay_ellipse = numpy.zeros_like(image)
             ex_vec = numpy.arange(-1, 1, 0.01) * sig_x
             ey_vec = numpy.sqrt(numpy.square(sig_y) * (1. - (numpy.square(ex_vec) / numpy.square(sig_x))))
             ex_vec = numpy.hstack([ex_vec, -ex_vec])
@@ -190,9 +184,9 @@ class Gaussian2DFitter(AdPythonPlugin):
             point_list = zip(ex_vec, ey_vec)
 
             for nf in point_list:
-                if is_inside_image_boundary(int(nf[0]), int(nf[1]), overlay_elipse.shape[0], overlay_elipse.shape[1]):
-                    overlay_elipse[int(nf[0]), int(nf[1])] = col
-            return overlay_elipse
+                if is_inside_image_boundary(int(nf[0]), int(nf[1]), overlay_ellipse.shape[0], overlay_ellipse.shape[1]):
+                    overlay_ellipse[int(nf[0]), int(nf[1])] = col
+            return overlay_ellipse
 
         def plot_ROI(image, results):
             '''Plots a box showing the region of interest used for the fit.'''
@@ -227,9 +221,9 @@ class Gaussian2DFitter(AdPythonPlugin):
 
         ellipse_x = min((0.5*(arr.shape[0] - fit[2]), 0.5*fit[2], s_x))
         ellipse_y = min((0.5*(arr.shape[1] - fit[3]), 0.5*fit[3], s_y))
-        if self["OverlayElipse"] == 1:
-            ol_elipse = plot_elipse(arr, fit[2], fit[3], ellipse_x, ellipse_y, th, 255)
-            arr = apply_overlay(arr, ol_elipse)
+        if self["Overlayellipse"] == 1:
+            ol_ellipse = plot_ellipse(arr, fit[2], fit[3], ellipse_x, ellipse_y, th, 255)
+            arr = apply_overlay(arr, ol_ellipse)
 
         if self["OverlayROI"] == 1 and results is not None:
             ol_ROI = plot_ROI(arr, results)
