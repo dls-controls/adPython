@@ -175,7 +175,7 @@ class AdPythonPlugin(object):
             self._attr = attr
             if not self.arrayProcessRunning.wait(timeout=timeout):
                 self.log.exception("Worker thread not running and timeout expired waiting for a new one")
-                raise AssertionError()
+                raise AssertionError("")
             self.notAwaitingResult.clear()
             self.inputQueue.put((arr, attr, self._params))
             return self.getResult(timeout)
@@ -204,7 +204,7 @@ class AdPythonPlugin(object):
             timeout /= 1000.0
         try:
             arr, attr, updated_params = self.resultQueue.get(timeout=timeout)
-            if not isinstance(arr, numpy.ndarray) and arr.split(':')[0] == "aborted":
+            if not isinstance(arr, numpy.ndarray) and arr.split(":")[0] == "aborted":
                 raise AssertionError("Abort was called on Worker")
             for k, v in attr.items():
                 self._attr[k] = v  # input dict of attributes is mutated instead of returned
@@ -218,7 +218,7 @@ class AdPythonPlugin(object):
             # Queue was closed, abort was called in the C++ thread
             raise
         except Exception as e:
-            self.log.exception('Error getting array result from queue: %s' % e)
+            self.log.exception("Error getting array result from queue: %s" % e)
             return None
         finally:
             self.notAwaitingResult.set()

@@ -59,7 +59,7 @@ class adPythonPlugin(AsynPort):
         classname = Choice('Predefined python class to use', [
             "Morph", "Focus", "Template", "BarCode", "Transfer", "Mitegen",
             "Circle", "DataMatrix", "Gaussian2DFitter", "PowerMean",
-            "MxSampleDetect","Rotate", "AttributeToArray"]),
+            "MxSampleDetect","Rotate", "AttributeToArray", "SlowBenchmark", "FftProcess"]),
         PORT = Simple('Port name for the plugin', str),
         QUEUE = Simple('Input array queue size', int),
         BLOCK = Simple('Blocking callbacks?', int),
