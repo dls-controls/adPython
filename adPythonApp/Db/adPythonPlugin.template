@@ -87,7 +87,7 @@ record(mbbi, "$(P)$(R)PluginState_RBV")
     field(SCAN, "I/O Intr")
 }
 
-record(busy, "$(P)$(R)AbortProcessing")
+record(bo, "$(P)$(R)AbortProcessing")
 {
     field(DTYP, "asynInt32")
     field(OUT,  "@asyn($(PORT),0,$(TIMEOUT))ADPYTHON_PROC_ABORT")

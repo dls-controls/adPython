@@ -45,6 +45,7 @@ def processArrayFromQueue(plugin):
         if plugin.inputQueue.empty():
             time.sleep(0.001)
         else:
+            threw = False
             (arr, attr, updated_params) = plugin.inputQueue.get()
             if not isinstance(arr, numpy.ndarray) and arr == "exit":
                 plugin.resultQueue.close()
@@ -52,12 +53,17 @@ def processArrayFromQueue(plugin):
                 return
             for k, v in updated_params.items():
                 plugin._params[k] = v
-            new_array = plugin.processArray(arr, attr)
             try:
-                plugin.resultQueue.put((new_array, attr, plugin._params))
-            except AssertionError:
-                # result queue was closed by the main thread, exit
-                return
+                new_array = plugin.processArray(arr, attr)
+            except Exception as e:
+                threw = True
+                plugin.resultQueue.put(["failed:%s" % e, None, None])
+            if not threw:
+                try:
+                    plugin.resultQueue.put((new_array, attr, plugin._params))
+                except AssertionError:
+                    # result queue was closed by the main thread, exit
+                    return
 
 
 class AdPythonPlugin(object):   
@@ -131,8 +137,12 @@ class AdPythonPlugin(object):
         self.notAwaitingResult.wait()
         didExit = self.arrayProcessExited.wait(timeout=0.01)
         self.inputQueue.close()
-        self.processArrayProcess.terminate()
-        os.kill(self._worker, signal.SIGKILL)
+        try:
+            self.processArrayProcess.terminate()
+            os.kill(self._worker, signal.SIGKILL)
+        except OSError:
+            # process might have already gone
+            pass
         if didExit:
             self.log.info("worker %s exited" % self._worker)
         else:
@@ -140,7 +150,10 @@ class AdPythonPlugin(object):
             self.resultQueue.close()
 
     def abortProcessing(self):
-        self.endArrayProcess()
+        try:
+            self.endArrayProcess()
+        except Exception as e:
+            self.log.exception(e)
         self.initArrayProcess()
 
     # called when parameter list changes
@@ -186,15 +199,14 @@ class AdPythonPlugin(object):
             return self.processArrayFallback(arr, attr)
         except AssertionError:
             # Queue was closed, abort was called in the C++ thread
+            self.notAwaitingResult.set()
             self.log.info("Abort called whilst processing array; using fallback method")
             return self.processArrayFallback(arr, attr)
         except Exception:
             # Log the exception in the logger as the C caller will throw away
             # the exception text
             self.log.exception("Error calling processArray()")
-            raise
-        finally:
-            self.notAwaitingResult.set()
+            return None
 
     def hasResult(self):
         return not self.resultQueue.empty()
@@ -204,30 +216,39 @@ class AdPythonPlugin(object):
             timeout /= 1000.0
         try:
             arr, attr, updated_params = self.resultQueue.get(timeout=timeout)
-            if not isinstance(arr, numpy.ndarray) and arr.split(":")[0] == "aborted":
-                raise AssertionError("Abort was called on Worker")
+            if not isinstance(arr, numpy.ndarray):
+                if arr.split(":")[0] == "aborted":
+                    self.notAwaitingResult.set()
+                    raise AssertionError("Abort was called on Worker")
+                elif arr.split(":")[0] == "failed":
+                    self.log.exception("Error getting array result from queue: %s" % arr.split(":")[1])
+                    self.notAwaitingResult.set()
+                    return None
             for k, v in attr.items():
                 self._attr[k] = v  # input dict of attributes is mutated instead of returned
             for k, v in updated_params.items():
                 self[k] = v
+            self.notAwaitingResult.set()
             return arr
         except Empty:
             # Worker didn't return processed array in time, call fallback method in main thread
+            self.notAwaitingResult.set()
             raise
         except AssertionError:
             # Queue was closed, abort was called in the C++ thread
+            self.notAwaitingResult.set()
             raise
         except Exception as e:
             self.log.exception("Error getting array result from queue: %s" % e)
-            return None
-        finally:
             self.notAwaitingResult.set()
+            return None
 
 
     # called when run offline
     def runOffline(self, **ranges):
         from adPythonOffline import AdPythonOffline
         AdPythonOffline(self, **ranges)
+
 
 if __name__=="__main__":
     # If run from the command line, assume we want the location of the numpy lib

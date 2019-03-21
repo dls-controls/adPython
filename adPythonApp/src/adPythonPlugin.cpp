@@ -268,11 +268,13 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
         status |= NDPluginDriver::writeInt32(pasynUser, value);
         status |= setIntegerParam(param, 0);
         callParamCallbacks();
-        this->unlock();
-        PyGILState_STATE gstate = PyGILState_Ensure();
-        PyObject_CallObject(this->pAbortProcessing, NULL);
-        PyGILState_Release(gstate);
-        this->lock();
+        if (this->pluginState != UGLY && this->pluginState != -1) { // don't attempt to kill if plugin didn't load
+            this->unlock();
+            PyGILState_STATE gstate = PyGILState_Ensure();
+            PyObject_CallObject(this->pAbortProcessing, NULL);
+            PyGILState_Release(gstate);
+            this->lock();
+        }
     } else {
         status |= NDPluginDriver::writeInt32(pasynUser, value);
     }
@@ -521,7 +523,7 @@ asynStatus adPythonPlugin::interpretReturn(PyObject *pValue) {
     // Return if we aren't good
     if (this->pluginState != GOOD) return asynError;
 
-    // Check return value for existance    
+    // Check return value for existence
     if (pValue == NULL) Bad("processArray() call failed");
            
     // If it wasn't an array, just return here
@@ -798,8 +800,8 @@ asynStatus adPythonPlugin::updateAttrDict(NDArray *pArray) {
         free(value);
         if (pObject == NULL) {
             asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,
-                      "%s:%s: attribute %s could not be put in attribute dict\n",
-                      driverName, __func__, pAttr->getName());
+                "%s:%s: attribute %s could not be put in attribute dict\n",
+                driverName, __func__, pAttr->getName());
         } else {
             PyDict_SetItemString(this->pAttrs, pAttr->getName(), pObject);
             Py_DECREF(pObject); 
