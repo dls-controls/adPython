@@ -1,0 +1,26 @@
+# % macro, P, Device Prefix
+# % macro, R, Device Suffix
+# % macro, PORT, Asyn Port name
+# % macro, TIMEOUT, Timeout
+# % macro, ADDR, Asyn Port address
+# % macro, N, double index
+
+record(ai, "$(P)$(R)Double$(N)_RBV") {
+    field(DTYP, "asynFloat64")
+    field(INP,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))double$(N)")
+    field(SCAN, "I/O Intr")
+    field(PREC, "3")
+}
+
+record(ao, "$(P)$(R)Double$(N)") {
+    field(DTYP, "asynFloat64")
+    field(OUT,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))double$(N)")
+    field(PREC, "3")
+}
+
+record(stringin, "$(P)$(R)Double$(N)Name_RBV") {
+    field(DTYP, "asynOctetRead")
+    field(INP,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))double$(N)Name")
+    field(SCAN, "I/O Intr")
+}
+

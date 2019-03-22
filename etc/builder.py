@@ -27,23 +27,45 @@ class adPythonPlugin(AsynPort):
     _SpecificTemplate = _adPythonBase
     Dependencies = (AdPython,)
 
-    def __init__(self, classname, PORT, NDARRAY_PORT, QUEUE = 5, BLOCK = 0, NDARRAY_ADDR = 0, BUFFERS = 50, MEMORY = 0, **args):
+    def __init__(self, classname, PORT, NDARRAY_PORT, QUEUE = 5, BLOCK = 0, NDARRAY_ADDR = 0, BUFFERS = 50, MEMORY = 0,
+                 CUSTOM_CLASS="", CUSTOM_FILE="", CUSTOM_NINT=0, CUSTOM_NDOUBLE=0, **args):
         # Init the superclass (AsynPort)
         self.__super.__init__(PORT)
         # Update the attributes of self from the commandline args
         self.__dict__.update(locals())
         # Make an instance of our template
         makeTemplateInstance(self._SpecificTemplate, locals(), args)
-        # Init the python classname specific class
-        class _tmp(AutoSubstitution):
-            ModuleName = adPythonPlugin.ModuleName
-            TrueName = "_adPython%s" % classname
-            TemplateFile = "adPython%s.template" % classname
+        # Arguments used for the class associated template/s
         _tmpargs = copy.deepcopy(args)
         _tmpargs['PORT'] = PORT
-        _tmp(**filter_dict(_tmpargs, _tmp.ArgInfo.Names()))
-        # Store the args
-        self.filename = "$(ADPYTHON)/adPythonApp/scripts/adPython%s.py" % classname
+        # Init the python classname specific class
+        if classname == "Custom":
+            class _tmpint(AutoSubstitution):
+                ModuleName = adPythonPlugin.ModuleName
+                TemplateFile = "adPythonCustomInt.template"
+
+            for index in range(1, CUSTOM_NINT+1):
+                _tmpint(N=index, **_tmpargs)
+
+            class _tmpdouble(AutoSubstitution):
+                ModuleName = adPythonPlugin.ModuleName
+                TemplateFile = "adPythonCustomDouble.template"
+
+            for index in range(1, CUSTOM_NDOUBLE+1):
+                _tmpdouble(N=index, **_tmpargs)
+
+            self.filename = CUSTOM_FILE
+            self.classname = CUSTOM_CLASS
+        else:
+            class _tmp(AutoSubstitution):
+                ModuleName = adPythonPlugin.ModuleName
+                TrueName = "_adPython%s" % classname
+                TemplateFile = "adPython%s.template" % classname
+
+            _tmp(**filter_dict(_tmpargs, _tmp.ArgInfo.Names()))
+
+            self.filename = "$(ADPYTHON)/adPythonApp/scripts/adPython%s.py" % classname
+
         self.Configure = 'adPythonPluginConfigure'
 
     def Initialise(self):
@@ -59,7 +81,7 @@ class adPythonPlugin(AsynPort):
         classname = Choice('Predefined python class to use', [
             "Morph", "Focus", "Template", "BarCode", "Transfer", "Mitegen",
             "Circle", "DataMatrix", "Gaussian2DFitter", "PowerMean",
-            "MxSampleDetect","Rotate"]),
+            "MxSampleDetect","Rotate", "Custom"]),
         PORT = Simple('Port name for the plugin', str),
         QUEUE = Simple('Input array queue size', int),
         BLOCK = Simple('Blocking callbacks?', int),
@@ -68,6 +90,12 @@ class adPythonPlugin(AsynPort):
         BUFFERS = Simple('Maximum number of NDArray buffers to be created for '
             'plugin callbacks', int),
         MEMORY = Simple('Max memory to allocate, should be maxw*maxh*nbuffer '
-            'for driver and all attached plugins', int))
+            'for driver and all attached plugins', int),
+
+        CUSTOM_CLASS = Simple('Class name used when setting a custom class', str),
+        CUSTOM_FILE = Simple('Python file path used when setting a custom class', str),
+        CUSTOM_NINT = Simple('Number of integer parameters in the selected custom class (i.e: int1, int2 ...)', int),
+        CUSTOM_NDOUBLE = Simple('Number of double parameters in the selected custom class (i.e: double1, double2 ...)',
+                                int))
 
 
