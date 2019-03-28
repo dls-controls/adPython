@@ -1,0 +1,21 @@
+# % macro, P, Device Prefix
+# % macro, R, Device Suffix
+# % macro, PORT, Asyn Port name
+# % macro, TIMEOUT, Timeout
+# % macro, ADDR, Asyn Port address
+# % macro, N, double index
+
+record(waveform, "$(P)$(R)IntArray$(N)") {
+    field(DTYP, "asynInt32ArrayIn")
+    field(OUT,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))intArray$(N)")    
+	field(NELM, "100")
+	field(FTVL, "LONG")
+	field(SCAN, "I/O Intr")
+}
+
+record(stringin, "$(P)$(R)Int$(N)Name_RBV") {
+    field(DTYP, "asynOctetRead")
+    field(INP,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))intArray$(N)Name")
+    field(SCAN, "I/O Intr")
+}
+

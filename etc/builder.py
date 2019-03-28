@@ -28,7 +28,7 @@ class adPythonPlugin(AsynPort):
     Dependencies = (AdPython,)
 
     def __init__(self, classname, PORT, NDARRAY_PORT, QUEUE = 5, BLOCK = 0, NDARRAY_ADDR = 0, BUFFERS = 50, MEMORY = 0,
-                 CUSTOM_CLASS="", CUSTOM_FILE="", CUSTOM_NINT=0, CUSTOM_NDOUBLE=0, **args):
+                 CUSTOM_CLASS="", CUSTOM_FILE="", CUSTOM_NINT=0, CUSTOM_NDOUBLE=0, CUSTOM_NINTARR=0, CUSTOM_NDOUBLEARR=0, **args):
         # Init the superclass (AsynPort)
         self.__super.__init__(PORT)
         # Update the attributes of self from the commandline args
@@ -53,6 +53,20 @@ class adPythonPlugin(AsynPort):
 
             for index in range(1, CUSTOM_NDOUBLE+1):
                 _tmpdouble(N=index, **_tmpargs)
+                
+            class _tmpintarray(AutoSubstitution):
+                ModuleName = adPythonPlugin.ModuleName
+                TemplateFile = "adPythonCustomIntArray.template"
+
+            for index in range(1, CUSTOM_NINTARR+1):
+                _tmpintarray(N=index, **_tmpargs)
+
+            class _tmpdoublearray(AutoSubstitution):
+                ModuleName = adPythonPlugin.ModuleName
+                TemplateFile = "adPythonCustomDoubleArray.template"
+
+            for index in range(1, CUSTOM_NDOUBLEARR+1):
+                _tmpdoublearray(N=index, **_tmpargs)
 
             self.filename = CUSTOM_FILE
             self.classname = CUSTOM_CLASS
