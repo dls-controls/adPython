@@ -13,7 +13,7 @@ record(waveform, "$(P)$(R)IntArray$(N)") {
 	field(SCAN, "I/O Intr")
 }
 
-record(stringin, "$(P)$(R)Int$(N)Name_RBV") {
+record(stringin, "$(P)$(R)IntArray$(N)Name_RBV") {
     field(DTYP, "asynOctetRead")
     field(INP,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))intArray$(N)Name")
     field(SCAN, "I/O Intr")
