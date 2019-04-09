@@ -110,6 +110,9 @@ class adPythonPlugin(AsynPort):
         CUSTOM_FILE = Simple('Python file path used when setting a custom class', str),
         CUSTOM_NINT = Simple('Number of integer parameters in the selected custom class (i.e: int1, int2 ...)', int),
         CUSTOM_NDOUBLE = Simple('Number of double parameters in the selected custom class (i.e: double1, double2 ...)',
+                                int),
+        CUSTOM_NINTARR = Simple('Number of integer array parameters in the selected custom class (i.e: intArray1, intArray2 ...)', int),
+        CUSTOM_NDOUBLEARR = Simple('Number of double array parameters in the selected custom class (i.e: doubleArray1, doubleArray2 ...)',
                                 int))
 
 
