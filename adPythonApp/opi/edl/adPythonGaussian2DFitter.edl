@@ -3,8 +3,8 @@ beginScreenProperties
 major 4
 minor 0
 release 1
-x 498
-y 283
+x 908
+y 136
 w 390
 h 820
 font "arial-bold-r-12.0"
@@ -46,9 +46,9 @@ major 4
 minor 0
 release 0
 x 5
-y 530
+y 560
 w 380
-h 110
+h 85
 lineColor index 14
 fill
 fillColor index 3
@@ -86,9 +86,9 @@ major 4
 minor 1
 release 1
 x 5
-y 520
-w 79
-h 13
+y 550
+w 80
+h 15
 font "arial-medium-r-12.0"
 fgColor index 14
 bgColor index 5
@@ -108,7 +108,7 @@ release 0
 x 0
 y 385
 w 390
-h 130
+h 160
 fgColor index 14
 bgColor index 3
 topShadowColor index 1
@@ -130,9 +130,9 @@ beginObjectProperties
 major 10
 minor 0
 release 0
-x 255
-y 535
-w 60
+x 85
+y 565
+w 50
 h 20
 controlPv "$(P)$(R)Maxiter"
 fgColor index 25
@@ -148,9 +148,9 @@ beginObjectProperties
 major 10
 minor 0
 release 0
-x 320
-y 535
-w 60
+x 140
+y 565
+w 50
 h 20
 controlPv "$(P)$(R)Maxiter_RBV"
 fgColor index 16
@@ -167,9 +167,9 @@ beginObjectProperties
 major 10
 minor 0
 release 0
-x 320
-y 560
-w 60
+x 330
+y 565
+w 50
 h 20
 controlPv "$(P)$(R)FitThinning_RBV"
 fgColor index 16
@@ -186,9 +186,9 @@ beginObjectProperties
 major 10
 minor 0
 release 0
-x 255
-y 560
-w 60
+x 275
+y 565
+w 50
 h 20
 controlPv "$(P)$(R)FitThinning"
 fgColor index 25
@@ -204,9 +204,9 @@ beginObjectProperties
 major 10
 minor 0
 release 0
-x 255
-y 585
-w 60
+x 85
+y 590
+w 50
 h 20
 controlPv "$(P)$(R)FitWindowSize"
 fgColor index 25
@@ -222,9 +222,9 @@ beginObjectProperties
 major 10
 minor 0
 release 0
-x 320
-y 585
-w 60
+x 140
+y 590
+w 50
 h 20
 controlPv "$(P)$(R)FitWindowSize_RBV"
 fgColor index 16
@@ -242,15 +242,34 @@ major 4
 minor 1
 release 1
 x 10
-y 535
-w 240
+y 565
+w 90
 h 20
 font "arial-bold-r-12.0"
 fgColor index 14
 bgColor index 3
 useDisplayBg
 value {
-  "Max number of fit iterations"
+  "Max iter."
+}
+endObjectProperties
+
+# (Static Text)
+object activeXTextClass
+beginObjectProperties
+major 4
+minor 1
+release 1
+x 200
+y 565
+w 75
+h 20
+font "arial-bold-r-12.0"
+fgColor index 14
+bgColor index 3
+useDisplayBg
+value {
+  "Fit thinning"
 }
 endObjectProperties
 
@@ -261,34 +280,15 @@ major 4
 minor 1
 release 1
 x 10
-y 560
-w 240
+y 590
+w 65
 h 20
 font "arial-bold-r-12.0"
 fgColor index 14
 bgColor index 3
 useDisplayBg
 value {
-  "Fit thinning (every nth point)"
-}
-endObjectProperties
-
-# (Static Text)
-object activeXTextClass
-beginObjectProperties
-major 4
-minor 1
-release 1
-x 10
-y 585
-w 240
-h 20
-font "arial-bold-r-12.0"
-fgColor index 14
-bgColor index 3
-useDisplayBg
-value {
-  "Fit window (mult rough window by this)"
+  "Fit window"
 }
 endObjectProperties
 
@@ -600,7 +600,7 @@ major 4
 minor 4
 release 0
 x 10
-y 610
+y 615
 w 370
 h 25
 fgColor index 43
