@@ -25,7 +25,7 @@ WORK=/dls_sw/work/R3.14.12.7/support
 TOOLS_BASE=/dls_sw/prod/tools/RHEL7-x86_64
 
 ASYN = $(SUPPORT)/asyn/4-34
-ADCORE = $(SUPPORT)/ADCore/3-4dls1
+ADCORE = $(SUPPORT)/ADCore/3-4dls2
 PYTHON_PREFIX=$(TOOLS_BASE)/Python/2-7-13/prefix
 
 # EPICS_BASE usually appears last so other apps can override stuff:
