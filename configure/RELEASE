@@ -20,17 +20,16 @@
 # CONFIG_SITE file.
 
 TEMPLATE_TOP=$(EPICS_BASE)/templates/makeBaseApp/top
-SUPPORT=/dls_sw/prod/R3.14.12.3/support
-WORK=/dls_sw/work/R3.14.12.3/support
-TOOLS_BASE=/dls_sw/prod/tools/RHEL6-x86_64
+SUPPORT=/dls_sw/prod/R3.14.12.7/support
+WORK=/dls_sw/work/R3.14.12.7/support
+TOOLS_BASE=/dls_sw/prod/tools/RHEL7-x86_64
 
-
-ASYN = $(SUPPORT)/asyn/4-31
-ADCORE = $(SUPPORT)/ADCore/2-6dls6
-PYTHON_PREFIX=$(TOOLS_BASE)/Python/2-7-3/prefix
+ASYN = $(SUPPORT)/asyn/4-34
+ADCORE = $(SUPPORT)/ADCore/3-4dls1
+PYTHON_PREFIX=$(TOOLS_BASE)/Python/2-7-13/prefix
 
 # EPICS_BASE usually appears last so other apps can override stuff:
-EPICS_BASE=/dls_sw/epics/R3.14.12.3/base
+EPICS_BASE=/dls_sw/epics/R3.14.12.7/base
 
 # Set RULES here if you want to take build rules from somewhere
 # other than EPICS_BASE:

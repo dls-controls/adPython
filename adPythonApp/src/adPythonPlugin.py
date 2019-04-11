@@ -20,13 +20,13 @@ def makePyInst(portname, filename, classname):
     log.setLevel(logging.INFO) 
     log.info("Creating %s:%s with portname %s", 
         os.path.basename(filename), classname, portname)
+    f = None
     try:
         # This dance is needed to load a file explicitly from a filename
         f = open(filename)
         pymodule, ext = os.path.splitext(os.path.basename(filename))
         AdPythonPlugin.log = log        
         mod = imp.load_module(pymodule, f, filename, (ext, 'U', 1))
-        f.close()
         # Get classname ref from this module and make an instance of it
         inst = getattr(mod, classname)()
         # Call paramChanged it might do some useful setup
@@ -37,6 +37,9 @@ def makePyInst(portname, filename, classname):
         # exception text
         log.exception("Creating %s:%s threw exception", filename, classname)
         raise
+    finally:
+        if f is not None:
+            f.close()
 
 
 def processArrayFromQueue(plugin):

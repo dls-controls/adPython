@@ -1,6 +1,7 @@
 #!/usr/bin/env dls-python
 
 from pkg_resources import require
+
 require("fit_lib == 1.3")
 require("scipy == 0.10.1")
 require("cothread==2.15")
@@ -17,7 +18,6 @@ import scipy.ndimage
 # the thread hangs indefinitely and throws no error.
 # As such checks have been put in place to set any such numbers to zero exactly.
 
-
 def centre_of_mass(image):
     m00 = numpy.sum(image)
     m10 = 0
@@ -31,7 +31,6 @@ def centre_of_mass(image):
     sx = numpy.std(image[:, cy])
     sy = numpy.std(image[cx, :])
     return cx, cy, sx, sy, int(m00)/numpy.sum(image.shape)
-
 
 class Gaussian2DFitter(AdPythonPlugin):
     tempCounter = 0

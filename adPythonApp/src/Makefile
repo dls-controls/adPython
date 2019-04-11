@@ -24,7 +24,7 @@ USR_CXXFLAGS += -Wmissing-declarations
 
 LIBRARY_IOC += adPython
 
-# xxxRecord.dbd will be installed into <top>/dbd
+# adPythonPlugin.dbd will be installed into <top>/dbd
 DBD += adPythonPlugin.dbd
 
 # The following are compiled and added to the support library
