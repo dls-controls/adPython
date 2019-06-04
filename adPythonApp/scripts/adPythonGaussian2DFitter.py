@@ -3,8 +3,8 @@
 from pkg_resources import require
 
 require("fit_lib == 1.3")
-require("scipy == 0.10.1")
-require("cothread==2.15")
+require("scipy == 0.19.1")
+require("cothread==2.14")
 
 from adPythonPlugin import AdPythonPlugin
 import numpy
