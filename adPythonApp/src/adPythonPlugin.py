@@ -21,6 +21,7 @@ def makePyInst(portname, filename, classname):
     log.info("Creating %s:%s with portname %s", 
         os.path.basename(filename), classname, portname)
     try:
+        file_modified = os.path.getmtime(filename)
         # This dance is needed to load a file explicitly from a filename
         f = open(filename)
         pymodule, ext = os.path.splitext(os.path.basename(filename))
@@ -74,7 +75,6 @@ class AdPythonPlugin(object):
     
     # init our param dict
     def __init__(self, params={}):
-
         self._params = dict(params)
         # self.log is the logger associated with AdPythonPlugin, copy it
         # and define it as the logger just for this instance...
@@ -85,10 +85,14 @@ class AdPythonPlugin(object):
         self.resultQueue = None
         self.processArrayProcess = None
         self.arrayProcessExited = None    # semaphore used bt worker to indicate it has exited
+        self.arrayProcessRunning = None
+        self.notAwaitingResult = None
+
+    def _start(self):
         self.arrayProcessRunning = multiprocessing.Event()
         self.notAwaitingResult = multiprocessing.Event()
         self.notAwaitingResult.set()
-        self.initArrayProcess()
+        self._initArrayProcess()
 
     # get a param value
     def __getitem__(self, param):
@@ -115,7 +119,7 @@ class AdPythonPlugin(object):
     def __iter__(self):
         return iter(self._params)
 
-    def initArrayProcess(self):
+    def _initArrayProcess(self):
         self.arrayProcessExited = multiprocessing.Event()
         oldInput = self.inputQueue
         oldResults = self.resultQueue
@@ -130,7 +134,7 @@ class AdPythonPlugin(object):
         self.log.info("new worker pid is %s" % workerId)
         self.arrayProcessRunning.set()
 
-    def endArrayProcess(self):
+    def _endArrayProcess(self):
         self.arrayProcessRunning.clear()
         self.inputQueue.put(["exit", None, None])
         self.resultQueue.put(["aborted:%s" % self._worker, None, None])
@@ -151,10 +155,10 @@ class AdPythonPlugin(object):
 
     def abortProcessing(self):
         try:
-            self.endArrayProcess()
+            self._endArrayProcess()
         except Exception as e:
             self.log.exception(e)
-        self.initArrayProcess()
+        self._initArrayProcess()
 
     # called when parameter list changes
     def _paramChanged(self):
@@ -217,13 +221,16 @@ class AdPythonPlugin(object):
         try:
             arr, attr, updated_params = self.resultQueue.get(timeout=timeout)
             if not isinstance(arr, numpy.ndarray):
-                if arr.split(":")[0] == "aborted":
-                    self.notAwaitingResult.set()
-                    raise AssertionError("Abort was called on Worker")
-                elif arr.split(":")[0] == "failed":
-                    self.log.exception("Error getting array result from queue: %s" % arr.split(":")[1])
-                    self.notAwaitingResult.set()
-                    return None
+                if isinstance(arr, str):
+                    if arr.split(":")[0] == "aborted":
+                        self.notAwaitingResult.set()
+                        raise AssertionError("Abort was called on Worker")
+                    elif arr.split(":")[0] == "failed":
+                        self.log.exception("Error getting array result from queue: %s" % arr.split(":")[1])
+                        self.notAwaitingResult.set()
+                        return None
+                else:
+                    raise Exception("Invalid return type from plugin: %s" % type(arr))
             for k, v in attr.items():
                 self._attr[k] = v  # input dict of attributes is mutated instead of returned
             for k, v in updated_params.items():

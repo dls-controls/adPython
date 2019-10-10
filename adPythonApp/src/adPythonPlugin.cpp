@@ -24,6 +24,12 @@
 #define UGLY 2
 
 // Some macros to set an error state and print a message
+#define clear_refs(obj) {   \
+    if (obj != NULL) {      \
+        Py_XDECREF(obj);    \
+        obj = NULL;         \
+    }                       \
+}
 #define NoGood(errString, st) {                         \
     asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR,    \
         "%s:%s: " errString "\n",                       \
@@ -91,7 +97,8 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
 
 void endProcessingThread(void* object) {
     adPythonPlugin* plugin  = (adPythonPlugin*) object;
-    if (plugin->pluginState != UGLY && plugin->pluginState != -1) { // don't attempt to kill if plugin didn't load
+    if (plugin->pluginState != UGLY && plugin->pluginState != -1 && plugin->pEndProcess != NULL) {
+        // don't attempt to kill if plugin didn't load
         PyGILState_STATE gstate = PyGILState_Ensure();
         PyObject_CallObject(plugin->pEndProcess, NULL);
         PyGILState_Release(gstate);
@@ -253,8 +260,8 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
             callParamCallbacks();
             // reload our python instance, this does callParamCallbacks for is
             status |= setIntegerParam(param, 0);
-
             status |= this->makePyInst();
+            callParamCallbacks();
         } else {
             // our param lib has changed, so update the dict and reprocess
             status |= this->updateParamDict();
@@ -268,7 +275,8 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
         status |= NDPluginDriver::writeInt32(pasynUser, value);
         status |= setIntegerParam(param, 0);
         callParamCallbacks();
-        if (this->pluginState != UGLY && this->pluginState != -1) { // don't attempt to kill if plugin didn't load
+        if (this->pluginState != UGLY && this->pluginState != -1 && this->pAbortProcessing != NULL) {
+            // don't attempt to kill if plugin didn't load
             this->unlock();
             PyGILState_STATE gstate = PyGILState_Ensure();
             PyObject_CallObject(this->pAbortProcessing, NULL);
@@ -408,51 +416,63 @@ asynStatus adPythonPlugin::makePyInst() {
     PyObject *pArgs = Py_BuildValue("sss", this->portName, filename, classname);
     if (pArgs == NULL) Bad("Can't build tuple for makePyInst()");
 
-    endProcessingThread(this);
+    if (this->pEndProcess != NULL) {
+        PyObject_CallObject(this->pEndProcess, NULL);
+    }
+
+    // Decrement all refs
+
+
+    clear_refs(this->pInstance);
+    clear_refs(this->pProcessArray);
+    clear_refs(this->pProcessArrayFallback);
+    clear_refs(this->pGetResult);
+    clear_refs(this->pHasResult);
+    clear_refs(this->pAbortProcessing);
+    clear_refs(this->pEndProcess);
+    clear_refs(this->pParamChanged);
+    clear_refs(this->pParams);
 
     // Create instance of this class, freeing the old one if it exists
-    Py_XDECREF(this->pInstance);
     this->pInstance = PyObject_CallObject(this->pMakePyInst, pArgs);
     Py_DECREF(pArgs);
     if (this->pInstance == NULL) Bad("Can't make instance of class");
 
+    // Get the abortProcessing function ref
+    this->pEndProcess = PyObject_GetAttrString(this->pInstance, "_endArrayProcess");
+    if (this->pEndProcess== NULL) Bad("Can't get abortProcessing ref");
+
+    // Get the _start function ref
+    PyObject* pStart = PyObject_GetAttrString(this->pInstance, "_start");
+    if (pStart== NULL) Bad("Can't get _start ref");
+    PyObject_CallObject(pStart, NULL);
+    Py_DECREF(pStart);
+
     // Get the processArray function ref
-    Py_XDECREF(this->pProcessArray);
     this->pProcessArray = PyObject_GetAttrString(this->pInstance, "_processArray");
     if (this->pProcessArray == NULL) Bad("Can't get processArray ref");
 
     // Get the processArrayFallback function ref
-    Py_XDECREF(this->pProcessArrayFallback);
     this->pProcessArrayFallback = PyObject_GetAttrString(this->pInstance, "processArrayFallback");
     if (this->pProcessArrayFallback == NULL) Bad("Can't get processArrayFallback ref");
 
     // Get the getResult function ref
-    Py_XDECREF(this->pGetResult);
     this->pGetResult = PyObject_GetAttrString(this->pInstance, "getResult");
     if (this->pGetResult == NULL) Bad("Can't get getResult ref");
 
     // Get the hasResult function ref
-    Py_XDECREF(this->pHasResult);
     this->pHasResult = PyObject_GetAttrString(this->pInstance, "hasResult");
     if (this->pHasResult == NULL) Bad("Can't get hasResult ref");
 
     // Get the abortProcessing function ref
-    Py_XDECREF(this->pAbortProcessing);
     this->pAbortProcessing = PyObject_GetAttrString(this->pInstance, "abortProcessing");
     if (this->pAbortProcessing == NULL) Bad("Can't get abortProcessing ref");
 
-    // Get the abortProcessing function ref
-    Py_XDECREF(this->pEndProcess);
-    this->pEndProcess = PyObject_GetAttrString(this->pInstance, "endArrayProcess");
-    if (this->pEndProcess== NULL) Bad("Can't get abortProcessing ref");
-
     // Get the paramChanged function ref
-    Py_XDECREF(this->pParamChanged);
     this->pParamChanged = PyObject_GetAttrString(this->pInstance, "_paramChanged");
     if (this->pParamChanged == NULL) Bad("Can't get paramChanged ref");
     
     // Get the param dict ref
-    Py_XDECREF(this->pParams);
     this->pParams = PyObject_GetAttrString(this->pInstance, "_params");
     if (this->pParams == NULL) Bad("Can't get _params ref");
 
