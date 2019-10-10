@@ -27,7 +27,7 @@ class adPythonPlugin(AsynPort):
     _SpecificTemplate = _adPythonBase
     Dependencies = (AdPython,)
 
-    def __init__(self, classname, PORT, NDARRAY_PORT, QUEUE = 5, BLOCK = 0, NDARRAY_ADDR = 0, BUFFERS = 50, MEMORY = 0,
+    def __init__(self, classname, PORT, NDARRAY_PORT, QUEUE = 5, BLOCK = 0, ENABLED=0, NDARRAY_ADDR = 0, BUFFERS = 50, MEMORY = 0,
                  CUSTOM_CLASS="", CUSTOM_FILE="", CUSTOM_NINT=0, CUSTOM_NDOUBLE=0, CUSTOM_NINTARR=0, CUSTOM_NDOUBLEARR=0, **args):
         # Init the superclass (AsynPort)
         self.__super.__init__(PORT)
@@ -95,12 +95,13 @@ class adPythonPlugin(AsynPort):
         classname = Choice('Predefined python class to use', [
             "Morph", "Focus", "Template", "BarCode", "Transfer", "Mitegen",
             "Circle", "DataMatrix", "Gaussian2DFitter", "PowerMean",
-            "MxSampleDetect","Rotate", "AttributeToArray", "SlowBenchmark", "FftProcess", "Custom"]),
+            "MxSampleDetect","Rotate", "AttributeToArray", "SlowBenchmark", "Custom"]),
         PORT = Simple('Port name for the plugin', str),
         QUEUE = Simple('Input array queue size', int),
         BLOCK = Simple('Blocking callbacks?', int),
         NDARRAY_PORT = Ident('Input array port', AsynPort),
         NDARRAY_ADDR = Simple('Input array port address', int),
+        ENABLED = Simple('Plugin enabled at startup?', str),
         BUFFERS = Simple('Maximum number of NDArray buffers to be created for '
             'plugin callbacks', int),
         MEMORY = Simple('Max memory to allocate, should be maxw*maxh*nbuffer '
