@@ -18,6 +18,15 @@ class AdPython(Device):
 class _adPythonBase(AutoSubstitution):
     '''This plugin Works out the area and tip of a sample'''
     TemplateFile = "adPythonPlugin.template"
+
+class _customPluginGui(AutoSubstitution):
+    TemplateFile = "adPythonCustomBase.template"
+    def __init__(self, *args, **kwargs):
+        if kwargs["TIMEOUT"]:
+            del kwargs["TIMEOUT"]
+        if kwargs["ADDR"]:
+            del kwargs["ADDR"]
+        super(_customPluginGui, self).__init__(*args, **kwargs)
     
 class adPythonPlugin(AsynPort):
     """This plugin creates an adPython object"""
@@ -37,9 +46,13 @@ class adPythonPlugin(AsynPort):
         makeTemplateInstance(self._SpecificTemplate, locals(), args)
         # Arguments used for the class associated template/s
         _tmpargs = copy.deepcopy(args)
-        _tmpargs['PORT'] = PORT
+        _tmpargs['PORT'] = PORT        
         # Init the python classname specific class
         if classname == "Custom":
+            #_tmpargs2 = copy.deepcopy(_tmpargs)
+            #del _tmpargs2["TIMEOUT"]
+            #del _tmpargs2["ADDR"]
+            _customPluginGui(**_tmpargs)   
             class _tmpint(AutoSubstitution):
                 ModuleName = adPythonPlugin.ModuleName
                 TemplateFile = "adPythonCustomInt.template"

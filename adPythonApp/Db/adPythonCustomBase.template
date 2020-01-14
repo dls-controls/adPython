@@ -1,0 +1,4 @@
+# % macro, P, Device Prefix
+# % macro, R, Device Suffix
+# % macro, PORT, Asyn Port name
+# % gui, $(PORT), edmtab, adPythonCustom.edl, P=$(P),R=$(R)

@@ -439,15 +439,15 @@ asynStatus adPythonPlugin::makePyInst() {
     // Create instance of this class, freeing the old one if it exists
     this->pInstance = PyObject_CallObject(this->pMakePyInst, pArgs);
     Py_DECREF(pArgs);
-    if (this->pInstance == NULL) Bad("Can't make instance of class");
-
-    // Get the abortProcessing function ref
+    if (this->pInstance == NULL) Bad("Can't make instance of class");    
+    
+    // Get the endProcess function ref    
     this->pEndProcess = PyObject_GetAttrString(this->pInstance, "_endArrayProcess");
-    if (this->pEndProcess== NULL) Bad("Can't get abortProcessing ref");
+    if (this->pEndProcess== NULL) Bad("Can't get abortProcessing ref");  
 
     // Get the _start function ref
     PyObject* pStart = PyObject_GetAttrString(this->pInstance, "_start");
-    if (pStart== NULL) Bad("Can't get _start ref");
+    if (pStart== NULL) Bad("Can't get _start ref");  
     PyObject_CallObject(pStart, NULL);
     Py_DECREF(pStart);
 
@@ -655,7 +655,10 @@ asynStatus adPythonPlugin::updateParamDict() {
   */ 
 asynStatus adPythonPlugin::updateParamList(int atinit) { 
     // Return if we aren't all good
-    if (this->pluginState != GOOD) return asynError;
+    if (this->pluginState != GOOD) {
+        asynPrint(this->pasynUserSelf, ASYN_TRACE_ERROR, "not updating param list; plugin not in good state\n");
+        return asynError;
+    }
     
     // Create param key list
     PyObject *pKeys = PyDict_Keys(this->pParams);
@@ -675,6 +678,8 @@ asynStatus adPythonPlugin::updateParamList(int atinit) {
                     driverName, __func__, paramStr);    
              continue;        
             }
+        } else {
+            asynPrint(this->pasynUserSelf, ASYN_TRACE_FLOW, "creating asyn param '%s'\n", paramStr);
         }
         PyObject *value = PyDict_GetItem(this->pParams, key);
         if (PyFloat_Check(value)) {

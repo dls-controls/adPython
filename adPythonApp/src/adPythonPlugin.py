@@ -60,9 +60,8 @@ def processArrayFromQueue(plugin):
             try:
                 new_array = plugin.processArray(arr, attr)
             except Exception as e:
-                threw = True
                 plugin.resultQueue.put(["failed:%s" % e, None, None])
-            if not threw:
+            else:
                 try:
                     plugin.resultQueue.put((new_array, attr, plugin._params))
                 except AssertionError:

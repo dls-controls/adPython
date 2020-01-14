@@ -7,7 +7,7 @@
 
 record(waveform, "$(P)$(R)DoubleArray$(N)") {
     field(DTYP, "asynFloat64ArrayIn")
-    field(OUT,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))doubleArray$(N)")    
+    field(INP,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))doubleArray$(N)")    
 	field(NELM, "100")
 	field(FTVL, "DOUBLE")
 	field(SCAN, "I/O Intr")
