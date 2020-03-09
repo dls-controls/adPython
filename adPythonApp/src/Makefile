@@ -21,6 +21,7 @@ USR_CXXFLAGS += -Wcast-align
 USR_CXXFLAGS += -Wwrite-strings
 USR_CXXFLAGS += -Wredundant-decls
 USR_CXXFLAGS += -Wmissing-declarations
+USR_CXXFLAGS += -D__STDC_VERSION__
 
 LIBRARY_IOC += adPython
 
