@@ -134,17 +134,13 @@ def locate_sample(edge_arr, params):
         assert direction == -1
         columns = reversed(xrange(width))
 
+    n=np.transpose(np.nonzero(edge_arr))
+    for y, x in n:
+        if top[x] is None:
+            top[x] = y
+        bottom[x] = y
+
     for x in columns:
-        for y in rows:
-
-            if not edge_arr[y, x]:
-                continue
-                
-            if top[x] is None:
-                top[x] = y
-
-            bottom[x] = y
-
         # Look for the first non-narrow region between top and bottom edges.
         if tip_x is None and top[x] is not None \
         and abs(top[x] - bottom[x]) > min_tip_height:
