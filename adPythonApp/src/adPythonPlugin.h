@@ -6,6 +6,10 @@
 #include <iocsh.h>
 #include <epicsExport.h>
 
+#if defined(_MSC_VER) && !defined(__func__)
+#define __func__ __FUNCTION__
+#endif
+
 // Max number of user parameters in a subclass
 #define NUSERPARAMS 100
 
@@ -58,7 +62,6 @@ private:
     NDAttributeList *pFileAttributes;
     int nextParam, pluginState;
     epicsMutexId dictMutex;
-    PyThreadState *threadState;
 };
 
 #endif

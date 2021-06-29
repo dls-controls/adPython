@@ -11,7 +11,6 @@
 #define NPY_INTERNAL_BUILD 0
 #include "numpy/ndarrayobject.h"
 #include <stdio.h>
-#include <libgen.h>
 #include <epicsTime.h>
 #include "NDArray.h"
 #include "adPythonPlugin.h"
@@ -37,13 +36,15 @@
 #define Bad(errString) NoGood(errString, BAD)
 #define Ugly(errString) NoGood(errString, UGLY)
 
+// Used in setting the python module search path
+#ifdef _WIN32
+#define PATH_LIST_SEPARATOR ";"
+#else
+#define PATH_LIST_SEPARATOR ":"
+#endif
+
 // Used in error printing
 const char *driverName = "adPythonPlugin";
-
-// This holds the threadState of the thread that initialised python
-// We need it to get a handle on the interpreter so create a threadState
-// object for each port
-static PyThreadState *mainThreadState = NULL;
 
 adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
                    const char *classname, int queueSize, int blockingCallbacks,
@@ -84,24 +85,24 @@ adPythonPlugin::adPythonPlugin(const char *portNameArg, const char *filename,
  */
 void adPythonPlugin::initThreads()
 {
-    // First we tell python where to find adPythonPlugin.py and other scripts
-    char buffer[BIGBUFFER];
-    snprintf(buffer, sizeof(buffer), "PYTHONPATH=%s", DATADIRS);
-    putenv(buffer);
-    
-    // Now we initialise python
+    PyGILState_STATE gstate;
+
+    // Initialise python
     if (!Py_IsInitialized()) {
         PyEval_InitThreads();
         Py_Initialize();
-    
-        // Be sure to save thread state to release the GIL and give a handle
-        // on the interpreter to this and other ports
-        mainThreadState = PyEval_SaveThread();
+        // Release the GIL
+        PyEval_SaveThread();
     }
     
-    // Create a thread state just for us
-    this->threadState = PyThreadState_New(mainThreadState->interp);
-    PyEval_RestoreThread(this->threadState);
+    // Acquire the GIL and set up non-python-created thread access
+    gstate = PyGILState_Ensure();
+
+    // Tell python where to find adPythonPlugin.py and other scripts
+    char buffer[BIGBUFFER];
+    snprintf(buffer, sizeof(buffer), "%s%s%s", Py_GetPath(),
+        PATH_LIST_SEPARATOR, DATADIRS);
+    PySys_SetPath(buffer);
     
     // Import our supporting library
     this->importAdPythonModule();
@@ -120,8 +121,8 @@ void adPythonPlugin::initThreads()
         this->updateParamList(1);
     }
     
-    // Release the GIL and finish
-    this->threadState = PyEval_SaveThread();
+    // Release the GIL and tear down non-python-created thread access
+    PyGILState_Release(gstate);
 }
 
 /** Callback function that is called by the NDArray driver with new NDArray data
@@ -133,6 +134,8 @@ void adPythonPlugin::initThreads()
   * Called with this->lock taken
   */
 void adPythonPlugin::processCallbacks(NDArray *pArray) {
+    PyGILState_STATE gstate;
+
     // First call the base class method
     NDPluginDriver::beginProcessCallbacks(pArray);
 
@@ -146,8 +149,8 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     this->unlock();
     epicsMutexLock(this->dictMutex);
 
-    // Make sure we're allowed to use the python API
-    PyEval_RestoreThread(this->threadState);
+    // Acquire the GIL and set up non-python-created thread access
+    gstate = PyGILState_Ensure();
     this->lock(); 
 
     // Store the time at the beginning of processing for profiling 
@@ -184,9 +187,11 @@ void adPythonPlugin::processCallbacks(NDArray *pArray) {
     setDoubleParam(adPythonTime, epicsTimeDiffInSeconds(&ts_end, &ts_start)*1000);
     callParamCallbacks();
 
-    // release GIL and dict Mutex 
+    // Unlock
     this->unlock();   
-    this->threadState = PyEval_SaveThread();
+    // Release the GIL and tear down non-python-created thread access
+    PyGILState_Release(gstate);
+    // Release dict mutex
     epicsMutexUnlock(this->dictMutex);
     
     // Spit out the array
@@ -212,14 +217,15 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
     int param = pasynUser->reason;
     if (param == adPythonLoad || 
             (this->nextParam && param >= adPythonUserParams[0])) {
+        PyGILState_STATE gstate;
         // We have to modify our python dict to match our param list
         // Note: to avoid deadlocks we should always take locks in order:
         //  dictMutex, then GIL, then this->lock
         // so unlock here to preserve this order
         this->unlock();
         epicsMutexLock(this->dictMutex);
-        // Make sure we're allowed to use the python API
-        PyEval_RestoreThread(this->threadState);
+        // Acquire the GIL and set up non-python-created thread access
+        gstate = PyGILState_Ensure();
         // Now call the bast class to write the value to the param list
         this->lock();        
         status |= NDPluginDriver::writeInt32(pasynUser, value);               
@@ -233,8 +239,9 @@ asynStatus adPythonPlugin::writeInt32(asynUser *pasynUser, epicsInt32 value) {
             // our param lib has changed, so update the dict and reprocess
             status |= this->updateParamDict();
         }
-        // release GIL and dict Mutex
-        this->threadState = PyEval_SaveThread();
+        // Release the GIL and tear down non-python-created thread access
+        PyGILState_Release(gstate);
+        // Release dict mutex
         epicsMutexUnlock(this->dictMutex);    
     } else {
         status |= NDPluginDriver::writeInt32(pasynUser, value);
@@ -255,21 +262,23 @@ asynStatus adPythonPlugin::writeFloat64(asynUser *pasynUser,
     int status = asynSuccess;
     int param = pasynUser->reason;
     if (this->nextParam && param >= adPythonUserParams[0]) {
+        PyGILState_STATE gstate;
         // We have to modify our python dict to match our param list
         // Note: to avoid deadlocks we should always take locks in order:
         //  dictMutex, then GIL, then this->lock
         // so unlock here to preserve this order
         this->unlock();
         epicsMutexLock(this->dictMutex);
-        // Make sure we're allowed to use the python API
-        PyEval_RestoreThread(this->threadState);
+        // Acquire the GIL and set up non-python-created thread access
+        gstate = PyGILState_Ensure();
         // Now call the bast class to write the value to the param list
         this->lock();        
         status |= NDPluginDriver::writeFloat64(pasynUser, value);                
         // our param lib has changed, so update the dict and reprocess
         status |= this->updateParamDict();
-        // release GIL and dict Mutex
-        this->threadState = PyEval_SaveThread();
+        // Release the GIL and tear down non-python-created thread access
+        PyGILState_Release(gstate);
+        // Release dict mutex
         epicsMutexUnlock(this->dictMutex);                        
     } else {
         status = NDPluginDriver::writeFloat64(pasynUser, value);
@@ -292,21 +301,23 @@ asynStatus adPythonPlugin::writeOctet(asynUser *pasynUser, const char *value,
     int status = asynSuccess;
     int param = pasynUser->reason;
     if (this->nextParam && param >= adPythonUserParams[0]) {
+        PyGILState_STATE gstate;
         // We have to modify our python dict to match our param list
         // Note: to avoid deadlocks we should always take locks in order:
         //  dictMutex, then GIL, then this->lock
         // so unlock here to preserve this order
         this->unlock();
         epicsMutexLock(this->dictMutex);
-        // Make sure we're allowed to use the python API
-        PyEval_RestoreThread(this->threadState);
+        // Acquire the GIL and set up non-python-created thread access
+        gstate = PyGILState_Ensure();
         // Now call the bast class to write the value to the param list
         this->lock();        
         status |= NDPluginDriver::writeOctet(pasynUser, value, maxChars, nActual);                
         // our param lib has changed, so update the dict and reprocess
         status |= this->updateParamDict();
-        // release GIL and dict Mutex
-        this->threadState = PyEval_SaveThread();
+        // Release the GIL and tear down non-python-created thread access
+        PyGILState_Release(gstate);
+        // Release dict mutex
         epicsMutexUnlock(this->dictMutex);       
     } else {
         status |= NDPluginDriver::writeOctet(pasynUser, value, maxChars, nActual);
