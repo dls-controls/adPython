@@ -203,20 +203,28 @@ record(mbbo, "$(P)$(R)ScanDirection") {
     field(DTYP, "asynInt32")
     field(OUT,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))scan_direction")
 
-    field(ZRST, "Left to right")
-    field(ZRVL, "1")
-    field(ONST, "Right to left")
-    field(ONVL, "-1")
+    field(ZRST, "Right to left")
+    field(ZRVL, "0")
+    field(ONST, "Bottom to top")
+    field(ONVL, "1")
+    field(TWST, "Left to right")
+    field(TWVL, "2")
+    field(THST, "Top to bottom")
+    field(THVL, "3")
 }
 record(mbbi, "$(P)$(R)ScanDirection_RBV") {
     field(SCAN, "I/O Intr")
     field(DTYP, "asynInt32")
     field(INP,  "@asyn($(PORT),$(ADDR),$(TIMEOUT))scan_direction")
 
-    field(ZRST, "Left to right")
-    field(ZRVL, "1")
-    field(ONST, "Right to left")
-    field(ONVL, "-1")
+    field(ZRST, "Right to left")
+    field(ZRVL, "0")
+    field(ONST, "Bottom to top")
+    field(ONVL, "1")
+    field(TWST, "Left to right")
+    field(TWVL, "2")
+    field(THST, "Top to bottom")
+    field(THVL, "3")
 }
 
 record(longout, "$(P)$(R)MinTipHeight") {

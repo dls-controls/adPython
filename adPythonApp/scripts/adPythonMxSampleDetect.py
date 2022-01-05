@@ -111,7 +111,13 @@ pp_candidates = [
 
 # A substitute for "None" which can fit into an np.int32 array/waveform record.
 # EDM plot can't handle negative integers, so best to use 0 rather than -1.
-none_value = 0
+NONE_VALUE = 0
+FORWARD = 1
+BACKWARD = -1
+RIGHT_TO_LEFT = 0
+BOTTOM_TO_TOP = 1
+LEFT_TO_RIGHT = 2
+TOP_TO_BOTTOM = 3
 
 
 def locate_sample(edge_arr, params):
@@ -119,70 +125,90 @@ def locate_sample(edge_arr, params):
     # mxSampleDetect.
 
     direction, min_tip_height = params[:2]
+    vertical = direction == BOTTOM_TO_TOP or direction == TOP_TO_BOTTOM
 
     # Index into edges_arr like [y, x], not [x, y]!
     height, width = edge_arr.shape
+    if vertical:
+        width, height = edge_arr.shape
 
     tip_y, tip_x = None, None
-    top = [None]*width
-    bottom = [None]*width
+    start = [None]*width
+    end = [None]*width
 
-    rows = xrange(height)
-    if direction == 1:
-        columns = xrange(width)
+    if direction == LEFT_TO_RIGHT or direction == TOP_TO_BOTTOM:
+        cross_section = xrange(width)
+        move = FORWARD
     else:
-        assert direction == -1
-        columns = reversed(xrange(width))
+        cross_section = reversed(xrange(width))
+        move = BACKWARD
 
-    n=np.transpose(np.nonzero(edge_arr))
-    for y, x in n:
-        if top[x] is None:
-            top[x] = y
-        bottom[x] = y
+    # edge_arr is 2 lists of x/y coords of the edge of the sample
+    # transpose converts to a list of [y, x] coords
+    perimeter = np.transpose(np.nonzero(edge_arr))
 
-    for x in columns:
-        # Look for the first non-narrow region between top and bottom edges.
-        if tip_x is None and top[x] is not None \
-        and abs(top[x] - bottom[x]) > min_tip_height:
+    # split perimeter into 2 arrays of each side of sample
+    if vertical:
+        for y, x in perimeter:
+            if start[y] is None:
+                start[y] = x
+            end[y] = x
+    else:
+        for y, x in perimeter:
+            if start[x] is None:
+                start[x] = y
+            end[x] = y
+
+    for point in cross_section:
+        # Look for the first non-narrow region between start and end edges.
+        if start[point] is not None and abs(start[point] - end[point]) > min_tip_height:
             
             # Move backwards to where there were no edges at all...
-            while top[x] is not None:
-                x += -direction
-                if x == -1 or x == width:
+            while start[point] is not None:
+                point += -move
+                if point == -1 or point == width:
                     # (In this case the sample is off the edge of the picture.)
                     break
-            x += direction # ...and forward one step. x is now at the tip.
+            point += move # ...and forward one step. point is now at the tip.
 
-            tip_x = x
-            tip_y = int(round(0.5*(top[x] + bottom[x])))
+            tip_x = point
+            tip_y = int(round(0.5*(start[point] + end[point])))
 
             # Zero the edge arrays to the left (right) of the tip.
-            if direction == 1:
-                top[:x] = [None for _ in xrange(x)]
-                bottom[:x] = [None for _ in xrange(x)]
+            if direction == LEFT_TO_RIGHT or direction == TOP_TO_BOTTOM:
+                start[:point] = [None for _ in xrange(point)]
+                end[:point] = [None for _ in xrange(point)]
             else:
-                assert direction == -1
-                top[x:] = [None for _ in xrange(x)]
-                bottom[x:] = [None for _ in xrange(x)]
+                start[point:] = [None for _ in xrange(point)]
+                end[point:] = [None for _ in xrange(point)]
+
+            # tip found, break out of loop
+            break
 
     # Prepare for export to PVs.
-    top = np.asarray(
-        [none_value if t is None else t for t in top], dtype=np.int32)
-    bottom = np.asarray(
-        [none_value if b is None else b for b in bottom], dtype=np.int32)
+    start = np.asarray(
+        [NONE_VALUE if i is None else i for i in start], dtype=np.int32)
+    end = np.asarray(
+        [NONE_VALUE if j is None else j for j in end], dtype=np.int32)
     if tip_y is None or tip_x is None:
         tip_y, tip_x = -1, -1
 
-    return (tip_y, tip_x), (top, bottom)
+    if vertical:
+        return (tip_x, tip_y), (start, end)
+    return (tip_y, tip_x), (start, end)
 
 
 def draw_circle(arr, (y, x), color, radius=5):
     cv2.circle(arr, (x, y), radius, color)
 
 
-def draw_edges(arr, edges, color):
+def draw_edges(arr, edges, color, vertical=False):
     for x, y in chain(*map(enumerate, edges)):
-        if y != none_value: arr[y, x] = color
+        if y != NONE_VALUE:
+            if vertical:
+                arr[x, y] = color
+            else:
+                arr[y, x] = color
 
 
 class MxSampleDetect(AdPythonPlugin):
@@ -263,7 +289,8 @@ class MxSampleDetect(AdPythonPlugin):
 
         # Do the annotations.
         if do_circle: draw_circle(out, tip, color)
-        if do_edges: draw_edges(out, edges, color)
+        vertical = self['scan_direction'] == BOTTOM_TO_TOP or self['scan_direction'] == TOP_TO_BOTTOM
+        if do_edges: draw_edges(out, edges, color, vertical)
 
         return out
 
@@ -282,7 +309,7 @@ if __name__ == '__main__':
         close_ksize=200,
         close_iterations=200,
         min_tip_height=100,
-        tip_x=500,
-        tip_y=500,
+        tip_x=1024,
+        tip_y=1024,
         out_arr=5,
     )
