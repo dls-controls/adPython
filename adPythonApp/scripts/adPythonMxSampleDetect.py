@@ -136,7 +136,7 @@ def locate_sample(edge_arr, params):
     start = [None]*width
     end = [None]*width
 
-    if direction == LEFT_TO_RIGHT or direction == TOP_TO_BOTTOM:
+    if direction in (LEFT_TO_RIGHT, TOP_TO_BOTTOM):
         cross_section = xrange(width)
         move = FORWARD
     else:
