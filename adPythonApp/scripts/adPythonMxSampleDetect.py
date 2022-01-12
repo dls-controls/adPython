@@ -125,7 +125,7 @@ def locate_sample(edge_arr, params):
     # mxSampleDetect.
 
     direction, min_tip_height = params[:2]
-    vertical = direction == BOTTOM_TO_TOP or direction == TOP_TO_BOTTOM
+    vertical = direction in (BOTTOM_TO_TOP, TOP_TO_BOTTOM)
 
     # Index into edges_arr like [y, x], not [x, y]!
     height, width = edge_arr.shape
